@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BSB Capital - Crypto Analysis Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-card: #1a2234;
+  --bg-card-hover: #1f2b42;
+  --border: #2a3550;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #3b82f6;
+  --accent-glow: rgba(59,130,246,0.15);
+  --green: #10b981;
+  --green-bg: rgba(16,185,129,0.12);
+  --red: #ef4444;
+  --red-bg: rgba(239,68,68,0.12);
+  --yellow: #f59e0b;
+  --yellow-bg: rgba(245,158,11,0.12);
+  --cyan: #06b6d4;
+  --purple: #8b5cf6;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+.top-bar {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, #0f1729 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(12px);
+}
+.logo {
+  display: flex; align-items: center; gap: 12px;
+  font-weight: 700; font-size: 18px; letter-spacing: 1px;
+}
+.logo-icon {
+  width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--cyan));
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 14px; color: white;
+}
+.logo span { color: var(--accent); }
+.badge {
+  font-size: 10px; background: var(--accent-glow); color: var(--accent);
+  padding: 3px 8px; border-radius: 6px; font-weight: 600;
+  border: 1px solid rgba(59,130,246,0.3);
+}
+
+.token-selector {
+  display: flex; gap: 8px; align-items: center;
+}
+.token-btn {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text-secondary); padding: 8px 20px; border-radius: 8px;
+  cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+.token-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); border-color: var(--accent); }
+.token-btn.active {
+  background: var(--accent-glow); color: var(--accent);
+  border-color: var(--accent); box-shadow: 0 0 20px rgba(59,130,246,0.15);
+}
+
+.container { max-width: 1440px; margin: 0 auto; padding: 24px 32px; }
+
+.loading {
+  display: none; position: fixed; inset: 0; background: rgba(10,14,23,0.85);
+  z-index: 200; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.loading.active { display: flex; }
+.spinner {
+  width: 48px; height: 48px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Verdict Banner */
+.verdict-banner {
+  border-radius: 16px; padding: 28px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px; border: 1px solid var(--border);
+  position: relative; overflow: hidden;
+}
+.verdict-banner::before {
+  content: ''; position: absolute; inset: 0; opacity: 0.06;
+  background: radial-gradient(ellipse at 30% 50%, currentColor, transparent 70%);
+}
+.verdict-left { display: flex; align-items: center; gap: 24px; z-index: 1; }
+.token-icon {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--bg-secondary); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 22px; color: var(--accent);
+}
+.token-info h1 { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.token-info .sub { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+.verdict-right { text-align: right; z-index: 1; }
+.verdict-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
+.verdict-value { font-size: 32px; font-weight: 800; margin-top: 4px; }
+.verdict-score { font-size: 14px; margin-top: 2px; }
+
+/* Grid */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.span-2 { grid-column: span 2; }
+
+/* Cards */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 24px; transition: border-color 0.2s;
+}
+.card:hover { border-color: rgba(59,130,246,0.3); }
+.card-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--text-muted); font-weight: 700; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* Metric boxes */
+.metric-box { text-align: center; }
+.metric-value { font-size: 28px; font-weight: 800; line-height: 1; }
+.metric-label { font-size: 11px; color: var(--text-muted); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.metric-sub { font-size: 13px; margin-top: 4px; font-weight: 600; }
+
+/* Score ring */
+.score-ring-container { display: flex; align-items: center; justify-content: center; }
+.score-ring { position: relative; width: 140px; height: 140px; }
+.score-ring svg { transform: rotate(-90deg); }
+.score-ring-bg { fill: none; stroke: var(--border); stroke-width: 8; }
+.score-ring-fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+.score-ring-text {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.score-ring-value { font-size: 32px; font-weight: 800; }
+.score-ring-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+/* Score bars */
+.score-bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.score-bar-label { width: 100px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+.score-bar-track { flex: 1; height: 8px; background: var(--bg-primary); border-radius: 4px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+.score-bar-value { width: 45px; text-align: right; font-size: 13px; font-weight: 700; }
+
+/* Donut chart */
+.donut-container { display: flex; align-items: center; gap: 24px; }
+.donut-legend { flex: 1; }
+.legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.legend-pct { margin-left: auto; font-weight: 700; color: var(--text-primary); }
+
+/* Flags */
+.flag-list { max-height: 300px; overflow-y: auto; }
+.flag-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 14px; border-radius: 8px; margin-bottom: 6px;
+  font-size: 13px; line-height: 1.5;
+}
+.flag-item.red { background: var(--red-bg); }
+.flag-item.yellow { background: var(--yellow-bg); }
+.flag-item.green { background: var(--green-bg); }
+.flag-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+.flag-cat { font-weight: 700; margin-right: 4px; }
+
+/* Indicator grid */
+.indicator-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid rgba(42,53,80,0.5);
+}
+.indicator-row:last-child { border-bottom: none; }
+.ind-name { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+.ind-value { font-size: 14px; font-weight: 700; }
+.ind-signal { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 6px; }
+
+/* Price changes */
+.positive { color: var(--green); }
+.negative { color: var(--red); }
+.neutral-c { color: var(--yellow); }
+
+/* Structural */
+.structural-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.structural-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-radius: 10px; background: var(--bg-primary);
+  font-size: 13px;
+}
+.struct-label { color: var(--text-secondary); font-weight: 600; }
+.struct-val { font-weight: 800; font-size: 14px; }
+
+/* Market stat cards */
+.stat-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 20px; text-align: left;
+}
+.stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.stat-value { font-size: 22px; font-weight: 800; margin-top: 6px; }
+.stat-sub { font-size: 12px; margin-top: 4px; font-weight: 600; }
+
+/* Chart card */
+.chart-wrapper { position: relative; height: 260px; }
+
+/* Disclaimer */
+.disclaimer {
+  text-align: center; color: var(--text-muted); font-size: 12px;
+  padding: 24px 0; border-top: 1px solid var(--border); margin-top: 32px;
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr; }
+  .container { padding: 16px; }
+  .top-bar { padding: 0 16px; flex-wrap: wrap; height: auto; padding: 12px 16px; gap: 8px; }
+  .token-selector { flex-wrap: wrap; }
+  .verdict-banner { flex-direction: column; text-align: center; gap: 16px; }
+  .verdict-right { text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo">
+    <div class="logo-icon">BSB</div>
+    <div><span>BSB</span> CAPITAL <span class="badge">INSTITUTIONAL</span></div>
+  </div>
+  <div class="token-selector" id="tokenSelector">
+    {% for t in tokens %}
+    <button class="token-btn {% if loop.first %}active{% endif %}" data-token="{{ t }}" onclick="loadToken('{{ t }}')">
+      {{ t | upper }}
+    </button>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="loading" id="loading"><div class="spinner"></div></div>
+
+<div class="container" id="content">
+  <div style="display:flex;align-items:center;justify-content:center;height:60vh;color:var(--text-muted)">
+    <div style="text-align:center">
+      <div style="font-size:48px;margin-bottom:16px">&#9878;</div>
+      <p>Selecciona un token para iniciar el analisis</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let priceChart = null;
+let distChart = null;
+
+function loadToken(key) {
+  document.querySelectorAll('.token-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-token="${key}"]`).classList.add('active');
+  document.getElementById('loading').classList.add('active');
+
+  fetch(`/api/analyze/${key}`)
+    .then(r => r.json())
+    .then(data => {
+      renderDashboard(data);
+      document.getElementById('loading').classList.remove('active');
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('loading').classList.remove('active');
+    });
+}
+
+function getVerdictColor(verdict) {
+  if (verdict.includes('Alcista')) return 'var(--green)';
+  if (verdict.includes('Bajista')) return 'var(--red)';
+  return 'var(--yellow)';
+}
+
+function getScoreColor(score) {
+  if (score >= 65) return 'var(--green)';
+  if (score >= 45) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function chgClass(v) { return v >= 0 ? 'positive' : 'negative'; }
+function chgStr(v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; }
+
+function scoreRingSVG(score, color) {
+  const r = 58, c = 2 * Math.PI * r;
+  const offset = c - (score / 100) * c;
+  return `<svg width="140" height="140" viewBox="0 0 140 140">
+    <circle cx="70" cy="70" r="${r}" class="score-ring-bg"/>
+    <circle cx="70" cy="70" r="${r}" class="score-ring-fill" stroke="${color}"
+      stroke-dasharray="${c}" stroke-dashoffset="${offset}"/>
+  </svg>`;
+}
+
+function renderDashboard(d) {
+  const vc = getVerdictColor(d.scores.verdict);
+  const vs = d.scores.final;
+
+  let html = `
+  <!-- VERDICT BANNER -->
+  <div class="verdict-banner" style="color:${vc}; background: var(--bg-card);">
+    <div class="verdict-left">
+      <div class="token-icon">${d.token.symbol}</div>
+      <div class="token-info">
+        <h1>${d.token.name} <span style="color:var(--text-muted);font-size:16px">${d.token.symbol}</span></h1>
+        <div class="sub">${d.token.type} &middot; Precio: ${d.token.price} &middot; <span class="${chgClass(d.token.change_24h)}">${chgStr(d.token.change_24h)} 24h</span></div>
+      </div>
+    </div>
+    <div class="verdict-right">
+      <div class="verdict-label">Veredicto</div>
+      <div class="verdict-value" style="color:${vc}">${d.scores.verdict}</div>
+      <div class="verdict-score" style="color:${vc}">Score: ${vs}/100</div>
+    </div>
+  </div>
+
+  <!-- MARKET STATS -->
+  <div class="grid-4">
+    <div class="stat-card">
+      <div class="stat-label">Market Cap</div>
+      <div class="stat-value">${d.token.market_cap}</div>
+      <div class="stat-sub ${chgClass(d.token.change_7d)}">${chgStr(d.token.change_7d)} 7d</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">FDV</div>
+      <div class="stat-value">${d.token.fdv}</div>
+      <div class="stat-sub" style="color:var(--text-muted)">Ratio: ${d.tokenomics.fdv_mcap_ratio}x</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Volumen 24h</div>
+      <div class="stat-value">${d.token.volume_24h}</div>
+      <div class="stat-sub ${chgClass(d.token.change_30d)}">${chgStr(d.token.change_30d)} 30d</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">ATH</div>
+      <div class="stat-value">${d.token.ath}</div>
+      <div class="stat-sub negative">${d.token.ath_pct.toFixed(1)}% desde ATH</div>
+    </div>
+  </div>
+
+  <!-- ROW: CHART + SCORE -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>Precio 90 Dias</div>
+      <div class="chart-wrapper"><canvas id="priceChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Puntuacion Final</div>
+      <div style="display:flex;align-items:center;gap:32px">
+        <div class="score-ring-container">
+          <div class="score-ring">
+            ${scoreRingSVG(vs, vc)}
+            <div class="score-ring-text">
+              <div class="score-ring-value" style="color:${vc}">${vs}</div>
+              <div class="score-ring-label">Score</div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1">
+          ${scoreBar('Tokenomics', d.scores.tokenomics)}
+          ${scoreBar('Cualitativo', d.scores.qualitative)}
+          ${scoreBar('Tecnico', d.scores.technical)}
+          ${scoreBar('Riesgo', d.scores.risk)}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW: TOKENOMICS + DISTRIBUTION -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>Tokenomics</div>
+      ${indicatorRow('Insiders', d.tokenomics.insider_pct + '%', d.tokenomics.insider_pct > 40 ? 'red' : d.tokenomics.insider_pct > 25 ? 'yellow' : 'green', d.tokenomics.insider_pct > 40 ? 'Alto Riesgo' : d.tokenomics.insider_pct > 25 ? 'Moderado' : 'Favorable')}
+      ${indicatorRow('Inflacion Max', d.tokenomics.max_inflation + '%', d.tokenomics.max_inflation > 100 ? 'red' : d.tokenomics.max_inflation > 50 ? 'yellow' : 'green', d.tokenomics.max_inflation > 100 ? 'Peligroso' : d.tokenomics.max_inflation > 50 ? 'Moderado' : 'Controlado')}
+      ${indicatorRow('Supply Ratio', d.tokenomics.supply_ratio + '%', d.tokenomics.supply_ratio > 70 ? 'green' : d.tokenomics.supply_ratio > 40 ? 'yellow' : 'red', 'Circ/Total')}
+      ${indicatorRow('FDV/MCap', d.tokenomics.fdv_mcap_ratio + 'x', d.tokenomics.fdv_mcap_ratio > 10 ? 'red' : d.tokenomics.fdv_mcap_ratio > 5 ? 'yellow' : 'green', d.tokenomics.fdv_mcap_ratio > 10 ? 'Low Float' : 'Saludable')}
+      ${d.tokenomics.pu_ratio ? indicatorRow('PU Ratio', d.tokenomics.pu_ratio, d.tokenomics.pu_ratio > 100 ? 'red' : d.tokenomics.pu_ratio > 60 ? 'yellow' : 'green', d.tokenomics.pu_ratio > 100 ? 'Sobrevaluado' : d.tokenomics.pu_ratio > 60 ? 'Justo' : 'Infravaluado') : ''}
+      ${indicatorRow('Vesting', d.tokenomics.vesting_months + ' meses', d.tokenomics.vesting_months >= 48 ? 'green' : d.tokenomics.vesting_months >= 24 ? 'yellow' : 'red', 'Cliff: ' + d.tokenomics.cliff_months + 'm')}
+      ${indicatorRow('Utilidad', d.tokenomics.utility, d.tokenomics.has_real_demand ? 'green' : 'red', d.tokenomics.has_real_demand ? 'Demanda Real' : 'Sin Demanda')}
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Distribucion de Tokens</div>
+      <div class="donut-container">
+        <div style="width:180px;height:180px"><canvas id="distChart"></canvas></div>
+        <div class="donut-legend">
+          ${legendItem('#10b981', 'Comunidad', d.tokenomics.community_pct)}
+          ${legendItem('#3b82f6', 'Equipo', d.tokenomics.team_pct)}
+          ${legendItem('#8b5cf6', 'Inversores', d.tokenomics.investor_pct)}
+          ${legendItem('#06b6d4', 'Ecosistema', d.tokenomics.ecosystem_pct)}
+          ${legendItem('#f59e0b', 'Tesoreria', d.tokenomics.treasury_pct)}
+          ${d.tokenomics.other_pct > 0 ? legendItem('#64748b', 'Otros', d.tokenomics.other_pct) : ''}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW: QUALITATIVE 3-COLUMN -->
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>Sentimiento</div>
+      <div class="metric-box" style="margin-bottom:16px">
+        <div class="metric-value" style="color:${getScoreColor(d.qualitative_detail.sentiment_score)}">${d.qualitative_detail.sentiment_score}</div>
+        <div class="metric-label">Score</div>
+      </div>
+      ${indicatorRow('Hype Index', d.qualitative_detail.hype_index + '/100', d.qualitative_detail.hype_index > 80 ? 'yellow' : 'green', '')}
+      ${indicatorRow('Organico', d.qualitative_detail.organic_ratio + '%', d.qualitative_detail.organic_ratio > 60 ? 'green' : d.qualitative_detail.organic_ratio > 30 ? 'yellow' : 'red', '')}
+      ${indicatorRow('Sentimiento', (d.qualitative_detail.overall_sentiment > 0 ? '+' : '') + d.qualitative_detail.overall_sentiment, d.qualitative_detail.overall_sentiment > 0.3 ? 'green' : d.qualitative_detail.overall_sentiment < -0.3 ? 'red' : 'yellow', '')}
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Equipo</div>
+      <div class="metric-box" style="margin-bottom:16px">
+        <div class="metric-value" style="color:${getScoreColor(d.qualitative_detail.team_score)}">${d.qualitative_detail.team_score}</div>
+        <div class="metric-label">Score</div>
+      </div>
+      ${indicatorRow('Dev Activity', d.qualitative_detail.dev_activity + '/100', d.qualitative_detail.dev_activity > 60 ? 'green' : 'yellow', '')}
+      ${indicatorRow('Commits 30d', d.qualitative_detail.commits_30d, d.qualitative_detail.commits_30d > 100 ? 'green' : d.qualitative_detail.commits_30d > 30 ? 'yellow' : 'red', '')}
+      ${indicatorRow('Transparencia', d.qualitative_detail.transparency + '/100', d.qualitative_detail.transparency > 60 ? 'green' : 'yellow', '')}
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>Inversores & VCs</div>
+      <div class="metric-box" style="margin-bottom:16px">
+        <div class="metric-value" style="color:${getScoreColor(d.qualitative_detail.vc_score)}">${d.qualitative_detail.vc_score}</div>
+        <div class="metric-label">Score</div>
+      </div>
+      ${indicatorRow('Reputacion', d.qualitative_detail.vc_reputation + '/100', d.qualitative_detail.vc_reputation > 50 ? 'green' : 'yellow', '')}
+      ${indicatorRow('Cap Table', d.qualitative_detail.cap_table_health + '/100', d.qualitative_detail.cap_table_health > 60 ? 'green' : 'yellow', '')}
+      ${d.qualitative_detail.tier1.length > 0 ? '<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">Tier-1: <span style="color:var(--green);font-weight:600">' + d.qualitative_detail.tier1.join(', ') + '</span></div>' : '<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">Sin inversores Tier-1</div>'}
+      ${d.qualitative_detail.partnerships.length > 0 ? '<div style="margin-top:6px;font-size:12px;color:var(--text-muted)">Partners: <span style="color:var(--cyan);font-weight:600">' + d.qualitative_detail.partnerships.join(', ') + '</span></div>' : ''}
+    </div>
+  </div>
+
+  <!-- ROW: TECHNICAL -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Indicadores Tecnicos</div>
+      ${indicatorRow('Tendencia', d.technical_detail.trend, d.technical_detail.trend.includes('Alcista') ? 'green' : d.technical_detail.trend.includes('Bajista') ? 'red' : 'yellow', '')}
+      ${indicatorRow('RSI(14)', d.technical_detail.rsi, d.technical_detail.rsi_signal === 'overbought' ? 'red' : d.technical_detail.rsi_signal === 'oversold' ? 'green' : 'yellow', d.technical_detail.rsi_signal + (d.technical_detail.rsi_divergence ? ' [' + d.technical_detail.rsi_divergence + ' div]' : ''))}
+      ${indicatorRow('MACD', d.technical_detail.macd_histogram > 0 ? 'Positivo' : 'Negativo', d.technical_detail.macd_histogram > 0 ? 'green' : 'red', d.technical_detail.macd_crossover ? d.technical_detail.macd_crossover + ' cross' : '')}
+      ${indicatorRow('Bollinger', 'BW: ' + d.technical_detail.bb_bandwidth + '%', d.technical_detail.bb_squeeze ? 'yellow' : 'green', d.technical_detail.bb_squeeze ? 'SQUEEZE' : 'Normal')}
+      ${indicatorRow('VWAP', d.technical_detail.price_vs_vwap, d.technical_detail.price_vs_vwap === 'above' ? 'green' : 'red', d.technical_detail.vwap_vol_signal ? '+ Vol Confirm' : '')}
+      ${d.technical_detail.golden_cross ? '<div style="padding:8px 14px;border-radius:8px;background:var(--green-bg);color:var(--green);font-weight:700;font-size:13px;text-align:center;margin-top:8px">GOLDEN CROSS</div>' : ''}
+      ${d.technical_detail.death_cross ? '<div style="padding:8px 14px;border-radius:8px;background:var(--red-bg);color:var(--red);font-weight:700;font-size:13px;text-align:center;margin-top:8px">DEATH CROSS</div>' : ''}
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--red)"></span>Volatilidad & Riesgo</div>
+      ${indicatorRow('Regimen', d.technical_detail.regime, d.technical_detail.regime.includes('Baja') ? 'green' : d.technical_detail.regime.includes('Normal') ? 'yellow' : 'red', '')}
+      ${indicatorRow('Vol. 30d', d.technical_detail.volatility_30d + '%', d.technical_detail.volatility_30d > 80 ? 'red' : d.technical_detail.volatility_30d > 50 ? 'yellow' : 'green', '')}
+      ${indicatorRow('ATR', d.technical_detail.atr_pct + '%', 'yellow', '')}
+      ${indicatorRow('Choppiness', d.technical_detail.choppiness, d.technical_detail.choppiness < 38.2 ? 'green' : d.technical_detail.choppiness > 61.8 ? 'red' : 'yellow', d.technical_detail.choppiness < 38.2 ? 'Trending' : d.technical_detail.choppiness > 61.8 ? 'Ranging' : 'Transicion')}
+      ${indicatorRow('Drawdown 30d', d.technical_detail.drawdown_30d + '%', d.technical_detail.drawdown_30d > -10 ? 'green' : d.technical_detail.drawdown_30d > -25 ? 'yellow' : 'red', '90d: ' + d.technical_detail.drawdown_90d + '%')}
+      ${d.technical_detail.sharpe ? indicatorRow('Sharpe', d.technical_detail.sharpe, d.technical_detail.sharpe > 1 ? 'green' : d.technical_detail.sharpe > 0 ? 'yellow' : 'red', 'Sortino: ' + d.technical_detail.sortino) : ''}
+      ${indicatorRow('Confianza', d.technical_detail.confidence + '%', d.technical_detail.confidence > 70 ? 'green' : d.technical_detail.confidence > 40 ? 'yellow' : 'red', d.technical_detail.confidence > 70 ? 'Alta' : d.technical_detail.confidence > 40 ? 'Media' : 'Baja')}
+    </div>
+  </div>
+
+  <!-- ROW: RISK FLAGS + STRUCTURAL -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--red)"></span>Semaforo de Riesgos</div>
+      <div class="flag-list">
+        ${d.risk_detail.red_flags.map(f => flagItem('red', '&#9888;', f.category, f.description)).join('')}
+        ${d.risk_detail.yellow_flags.map(f => flagItem('yellow', '&#9888;', f.category, f.description)).join('')}
+        ${d.risk_detail.green_flags.map(f => flagItem('green', '&#10003;', f.category, f.description)).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Analisis Estructural</div>
+      <div class="structural-grid">
+        ${structItem('Low Float / High FDV', d.risk_detail.low_float_high_fdv)}
+        ${structItem('Incentivos Mercenarios', d.risk_detail.mercenary_incentives)}
+        ${structItem('Estructura de Dumping', d.risk_detail.dumping_structure)}
+      </div>
+      <div style="margin-top:16px">
+        ${indicatorRow('Moral Hazard', d.risk_detail.moral_hazard + '/100', d.risk_detail.moral_hazard > 60 ? 'red' : d.risk_detail.moral_hazard > 40 ? 'yellow' : 'green', d.risk_detail.moral_hazard > 60 ? 'Alto Riesgo' : d.risk_detail.moral_hazard > 40 ? 'Moderado' : 'Bajo')}
+      </div>
+      <div style="margin-top:24px;padding:16px;border-radius:10px;background:var(--bg-primary);text-align:center">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Conclusion</div>
+        <div style="font-size:14px;font-weight:600;color:${vc}">
+          ${d.risk_detail.dumping_structure ? 'Estructura disenada para DUMPING - alto riesgo' : vs >= 65 ? 'Estructura orientada a crecimiento a largo plazo' : vs >= 45 ? 'Estructura mixta - requiere monitoreo continuo' : 'Estructura desfavorable - multiples riesgos'}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    Este analisis es educativo y no constituye consejo financiero. Realice su propia investigacion antes de tomar decisiones de inversion.
+  </div>`;
+
+  document.getElementById('content').innerHTML = html;
+  renderPriceChart(d.chart);
+  renderDistChart(d.tokenomics);
+}
+
+function scoreBar(label, score) {
+  const c = getScoreColor(score);
+  return `<div class="score-bar-row">
+    <div class="score-bar-label">${label}</div>
+    <div class="score-bar-track"><div class="score-bar-fill" style="width:${score}%;background:${c}"></div></div>
+    <div class="score-bar-value" style="color:${c}">${score}</div>
+  </div>`;
+}
+
+function indicatorRow(name, value, color, signal) {
+  const colors = { green: 'var(--green)', red: 'var(--red)', yellow: 'var(--yellow)' };
+  const bgs = { green: 'var(--green-bg)', red: 'var(--red-bg)', yellow: 'var(--yellow-bg)' };
+  return `<div class="indicator-row">
+    <div class="ind-name">${name}</div>
+    <div class="ind-value" style="color:${colors[color] || 'var(--text-primary)'}">${value}</div>
+    ${signal ? '<div class="ind-signal" style="background:' + (bgs[color]||'transparent') + ';color:' + (colors[color]||'var(--text-secondary)') + '">' + signal + '</div>' : ''}
+  </div>`;
+}
+
+function legendItem(color, label, pct) {
+  return `<div class="legend-item">
+    <div class="legend-dot" style="background:${color}"></div>
+    <span>${label}</span>
+    <span class="legend-pct">${pct}%</span>
+  </div>`;
+}
+
+function flagItem(type, icon, cat, desc) {
+  return `<div class="flag-item ${type}">
+    <span class="flag-icon">${icon}</span>
+    <div><span class="flag-cat">[${cat}]</span> ${desc}</div>
+  </div>`;
+}
+
+function structItem(label, value) {
+  const color = value ? 'var(--red)' : 'var(--green)';
+  return `<div class="structural-item">
+    <span class="struct-label">${label}</span>
+    <span class="struct-val" style="color:${color}">${value ? 'SI' : 'NO'}</span>
+  </div>`;
+}
+
+function renderPriceChart(chart) {
+  if (priceChart) priceChart.destroy();
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+  gradient.addColorStop(0, 'rgba(59,130,246,0.25)');
+  gradient.addColorStop(1, 'rgba(59,130,246,0)');
+  priceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: chart.dates,
+      datasets: [{
+        data: chart.prices,
+        borderColor: '#3b82f6', borderWidth: 2,
+        backgroundColor: gradient, fill: true,
+        pointRadius: 0, tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: true, grid: { color: 'rgba(42,53,80,0.3)' }, ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 10 } } },
+        y: { display: true, grid: { color: 'rgba(42,53,80,0.3)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+      },
+      interaction: { intersect: false, mode: 'index' },
+    }
+  });
+}
+
+function renderDistChart(tok) {
+  if (distChart) distChart.destroy();
+  const ctx = document.getElementById('distChart').getContext('2d');
+  const labels = []; const data = []; const colors = [];
+  const items = [
+    ['Comunidad', tok.community_pct, '#10b981'],
+    ['Equipo', tok.team_pct, '#3b82f6'],
+    ['Inversores', tok.investor_pct, '#8b5cf6'],
+    ['Ecosistema', tok.ecosystem_pct, '#06b6d4'],
+    ['Tesoreria', tok.treasury_pct, '#f59e0b'],
+    ['Otros', tok.other_pct, '#64748b'],
+  ];
+  items.forEach(([l,v,c]) => { if(v > 0) { labels.push(l); data.push(v); colors.push(c); }});
+  distChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '65%',
+      plugins: { legend: { display: false } },
+    }
+  });
+}
+
+// Auto-load token from URL hash or default to ethereum
+window.addEventListener('DOMContentLoaded', () => {
+  const hash = window.location.hash.replace('#', '');
+  const token = ['ethereum','bitcoin','solana','arbitrum'].includes(hash) ? hash : 'ethereum';
+  loadToken(token);
+});
+</script>
+</body>
+</html>
