@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timezone
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from src.core.data_fetcher import DataFetcher

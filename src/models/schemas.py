@@ -69,8 +69,8 @@ class TrendDirection(Enum):
 @dataclass
 class TokenMarketData:
     """Raw market data for a token."""
-    name: str
-    symbol: str
+    name: str = ""
+    symbol: str = ""
     token_type: TokenType = TokenType.UNKNOWN
     price_usd: float = 0.0
     market_cap: float = 0.0
