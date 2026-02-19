@@ -8,4 +8,27 @@ build/
 *.egg
 .pytest_cache/
 .env
+.env.local
 *.log
+
+# Data persistence
+data/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (for 01 Exchange local API)
+node_modules/

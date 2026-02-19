@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delta Monitor v2 — Arbitrage Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #050508;
+  --bg-panel: #09090f;
+  --bg-header: #0d0d15;
+  --green: #00ff88;
+  --green-dim: #00cc6a;
+  --red: #ff3355;
+  --blue: #0088ff;
+  --yellow: #ffcc00;
+  --orange: #ff8800;
+  --gray: #444466;
+  --border: #1a1a2e;
+  --text: #c8c8e8;
+  --text-dim: #6666aa;
+  --purple: #aa55ff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+.green { color: var(--green); }
+.red { color: var(--red); }
+.yellow { color: var(--yellow); }
+.blue { color: var(--blue); }
+.dim { color: var(--text-dim); }
+.orange { color: var(--orange); }
+
+/* Animations */
+@keyframes flash-green {
+  0% { background: rgba(0,255,136,0.3); }
+  100% { background: transparent; }
+}
+@keyframes flash-red {
+  0% { background: rgba(255,51,85,0.3); }
+  100% { background: transparent; }
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.value-updated-green { animation: flash-green 0.5s ease-out; }
+.value-updated-red { animation: flash-red 0.5s ease-out; }
+.pulse { animation: pulse 1.5s infinite; }
+
+/* Header */
+header {
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+header h1 span { color: var(--green); }
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+.status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.fail { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.status-dot.mock { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.status-dot.offline { background: var(--gray); }
+
+/* Dry Run Banner */
+#dry-run-banner {
+  background: linear-gradient(90deg, rgba(255,204,0,0.15), rgba(255,136,0,0.15));
+  border-bottom: 1px solid var(--yellow);
+  color: var(--yellow);
+  text-align: center;
+  padding: 8px 20px;
+  font-weight: 600;
+  font-size: 13px;
+  display: none;
+}
+#dry-run-banner button {
+  background: rgba(255,204,0,0.2);
+  color: var(--yellow);
+  border: 1px solid var(--yellow);
+  padding: 3px 12px;
+  margin-left: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 12px;
+}
+#dry-run-banner button:hover { background: rgba(255,204,0,0.4); }
+
+/* Offline Banner */
+#offline-banner {
+  background: rgba(255,136,0,0.15);
+  border-bottom: 1px solid var(--orange);
+  color: var(--orange);
+  text-align: center;
+  padding: 8px;
+  font-weight: 500;
+  display: none;
+}
+
+/* Main Grid */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto auto;
+  gap: 12px;
+  padding: 12px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Panels */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 0 8px rgba(0,255,136,0.05);
+  overflow: hidden;
+}
+.panel.active {
+  box-shadow: 0 0 16px rgba(0,255,136,0.15);
+}
+.panel-header {
+  background: var(--bg-header);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.panel-body {
+  padding: 12px;
+  overflow-x: auto;
+}
+
+/* Span full */
+.span-3 { grid-column: span 3; }
+.span-2 { grid-column: span 2; }
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(26,26,46,0.5);
+  white-space: nowrap;
+}
+td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+tr:hover { background: rgba(0,255,136,0.03); }
+tr.viable { border-left: 3px solid var(--green); }
+tr.top-viable { border-left: 3px solid var(--green); background: rgba(0,255,136,0.05); }
+tr.not-viable { opacity: 0.5; }
+
+/* Badges */
+.badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.badge-top { background: rgba(0,255,136,0.2); color: var(--green); }
+.badge-viable { background: rgba(0,136,255,0.2); color: var(--blue); }
+.badge-rejected { background: rgba(68,68,102,0.3); color: var(--gray); }
+.badge-active { background: rgba(0,255,136,0.2); color: var(--green); }
+.badge-closing { background: rgba(255,204,0,0.2); color: var(--yellow); }
+.badge-liq { background: rgba(255,51,85,0.2); color: var(--red); }
+
+/* Buttons */
+.btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.btn-green { background: rgba(0,255,136,0.15); color: var(--green); border-color: var(--green-dim); }
+.btn-green:hover { background: rgba(0,255,136,0.3); }
+.btn-red { background: rgba(255,51,85,0.15); color: var(--red); border-color: var(--red); }
+.btn-red:hover { background: rgba(255,51,85,0.3); }
+.btn-blue { background: rgba(0,136,255,0.15); color: var(--blue); border-color: var(--blue); }
+.btn-blue:hover { background: rgba(0,136,255,0.3); }
+
+/* Liq bar */
+.liq-bar {
+  width: 60px; height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+}
+.liq-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+/* Calculator */
+.calc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.calc-input-group { margin-bottom: 10px; }
+.calc-input-group label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.calc-input-group input, .calc-input-group select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+.calc-input-group input[type="range"] {
+  padding: 0;
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  border: none;
+}
+.calc-input-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--green);
+  cursor: pointer;
+}
+.calc-output {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+/* Log */
+#log-container {
+  max-height: 250px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.log-entry { padding: 2px 0; }
+.log-time { color: var(--text-dim); }
+.log-INFO { color: var(--gray); }
+.log-OPRT { color: var(--green); }
+.log-RISK { color: var(--blue); }
+.log-WARN { color: var(--yellow); }
+.log-ERROR { color: var(--red); }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 0 30px rgba(0,255,136,0.1);
+}
+.modal h3 {
+  margin-bottom: 14px;
+  font-size: 15px;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+/* Countdown */
+.countdown {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Toggle */
+.toggle-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.toggle-label:hover { color: var(--text); }
+
+/* Portfolio summary */
+.portfolio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  text-align: center;
+}
+.portfolio-metric {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+}
+.portfolio-metric .label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.portfolio-metric .value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .main-grid { grid-template-columns: 1fr 1fr; }
+  .span-3 { grid-column: span 2; }
+}
+@media (max-width: 700px) {
+  .main-grid { grid-template-columns: 1fr; }
+  .span-3, .span-2 { grid-column: span 1; }
+  .portfolio-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <h1><span>DELTA</span> MONITOR v2</h1>
+  <div class="header-status">
+    <span><span class="status-dot" id="dot-nado"></span>NADO: <span id="status-nado">--</span></span>
+    <span><span class="status-dot" id="dot-01"></span>01: <span id="status-01">--</span></span>
+    <span><span class="status-dot" id="dot-ws"></span>WS: <span id="status-ws">--</span></span>
+    <span id="mode-badge" class="badge badge-viable">DRY</span>
+    <span class="mono dim" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<!-- Banners -->
+<div id="dry-run-banner">
+  MODO SIMULACION ACTIVO — Las ordenes NO se ejecutan en los exchanges reales
+  <button onclick="requestRealMode()">Activar modo real</button>
+</div>
+<div id="offline-banner">OFFLINE — Mostrando datos de demostracion</div>
+
+<div class="main-grid">
+
+  <!-- PORTFOLIO SUMMARY -->
+  <div class="panel span-3">
+    <div class="panel-header">
+      <span>Portfolio</span>
+      <span class="countdown" id="refresh-countdown">Actualiza en: --s</span>
+    </div>
+    <div class="panel-body">
+      <div class="portfolio-grid">
+        <div class="portfolio-metric">
+          <div class="label">Capital Desplegado</div>
+          <div class="value mono green" id="p-capital">$0</div>
+        </div>
+        <div class="portfolio-metric">
+          <div class="label">Funding Cobrado</div>
+          <div class="value mono green" id="p-funding">$0</div>
+        </div>
+        <div class="portfolio-metric">
+          <div class="label">Fees Pagadas</div>
+          <div class="value mono red" id="p-fees">$0</div>
+        </div>
+        <div class="portfolio-metric">
+          <div class="label">Net PnL</div>
+          <div class="value mono" id="p-pnl">$0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPPORTUNITIES TABLE -->
+  <div class="panel span-2 active" id="panel-opps">
+    <div class="panel-header">
+      <span>Oportunidades <span id="opp-count" class="badge badge-top" style="display:none">0</span></span>
+      <label class="toggle-label"><input type="checkbox" id="show-rejected" onchange="renderOpportunities()"> Mostrar no viables</label>
+    </div>
+    <div class="panel-body">
+      <table>
+        <thead><tr>
+          <th>Score</th><th>Par</th><th>Long@</th><th>Short@</th>
+          <th>F.APR Nado</th><th>F.APR 01</th><th>Fees</th><th>Spread</th>
+          <th>Net APR</th><th>Brk-Even</th><th>Accion</th>
+        </tr></thead>
+        <tbody id="opps-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- POSITIONS -->
+  <div class="panel" id="panel-pos">
+    <div class="panel-header">
+      <span>Posiciones Abiertas</span>
+      <span class="mono dim" id="pos-count">0</span>
+    </div>
+    <div class="panel-body">
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Par</th><th>Capital</th><th>PnL</th><th>APR</th><th>Edad</th><th>Liq%</th><th></th>
+        </tr></thead>
+        <tbody id="pos-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FUNDING CHART -->
+  <div class="panel span-2">
+    <div class="panel-header">
+      <span>Funding Rates (24h)</span>
+      <span class="dim" style="font-size:11px">Hourly %</span>
+    </div>
+    <div class="panel-body" style="height: 260px;">
+      <canvas id="funding-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- CALCULATOR -->
+  <div class="panel">
+    <div class="panel-header"><span>Calculadora Delta-Neutral</span></div>
+    <div class="panel-body">
+      <div class="calc-grid">
+        <div>
+          <div class="calc-input-group">
+            <label>Capital USD</label>
+            <input type="range" id="calc-capital" min="150" max="900" value="450" oninput="updateCalc()">
+            <input type="number" id="calc-capital-num" value="450" min="150" max="900" oninput="syncSlider(this,'calc-capital');updateCalc()">
+          </div>
+          <div class="calc-input-group">
+            <label>Par</label>
+            <select id="calc-pair" onchange="updateCalc()">
+              <option>ETH-PERP</option><option>BTC-PERP</option><option>SOL-PERP</option>
+            </select>
+          </div>
+          <div class="calc-input-group">
+            <label>Apalancamiento</label>
+            <input type="range" id="calc-leverage" min="1" max="3" step="0.5" value="2" oninput="updateCalc()">
+            <span class="mono" id="calc-lev-label">2.0x</span>
+          </div>
+        </div>
+        <div class="calc-output mono" id="calc-output">
+          Ajusta los parametros...
+        </div>
+      </div>
+      <div style="margin-top:10px;text-align:right">
+        <button class="btn btn-blue" onclick="copyCalcSummary()">COPIAR RESUMEN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEES TABLE -->
+  <div class="panel span-2">
+    <div class="panel-header"><span>Comparativa Fees & Spreads</span></div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Par</th><th>Spread Nado</th><th>Spread 01</th><th>Depth Nado</th><th>Depth 01</th><th>Price Nado</th><th>Price 01</th></tr></thead>
+        <tbody id="fees-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>Historial</span>
+      <button class="btn btn-blue" onclick="exportCSV()">CSV</button>
+    </div>
+    <div class="panel-body" style="max-height:200px;overflow-y:auto">
+      <table>
+        <thead><tr><th>ID</th><th>Par</th><th>PnL</th><th>APR</th><th>Horas</th><th>Motivo</th></tr></thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel span-3">
+    <div class="panel-header"><span>Log en Tiempo Real</span><span class="dim mono" id="log-count">0</span></div>
+    <div class="panel-body">
+      <div id="log-container"></div>
+    </div>
+  </div>
+</div>
+
+<!-- OPEN MODAL -->
+<div class="modal-overlay" id="open-modal">
+  <div class="modal">
+    <h3>Abrir Posicion</h3>
+    <div id="open-modal-content"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('open-modal')">CANCELAR</button>
+      <button class="btn btn-green" id="open-modal-confirm">CONFIRMAR APERTURA</button>
+    </div>
+  </div>
+</div>
+
+<!-- CLOSE MODAL -->
+<div class="modal-overlay" id="close-modal">
+  <div class="modal">
+    <h3>Cerrar Posicion</h3>
+    <div id="close-modal-content"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('close-modal')">CANCELAR</button>
+      <button class="btn btn-red" id="close-modal-confirm">CONFIRMAR CIERRE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===========================================================================
+// STATE & CONFIG
+// ===========================================================================
+const WS_URL = 'ws://localhost:8081';
+let ws = null;
+let wsConnected = false;
+let state = null;
+let fundingChart = null;
+let refreshCountdown = 30;
+let countdownInterval = null;
+
+// ===========================================================================
+// MOCK DATA (when offline)
+// ===========================================================================
+function generateMockState() {
+  const now = Date.now() / 1000;
+  const pairs = ['BTC-PERP','ETH-PERP','SOL-PERP'];
+  const mockPrices = {'BTC-PERP': 97500, 'ETH-PERP': 3250, 'SOL-PERP': 185};
+  const mockFunding = {'BTC-PERP': [38.2,35.1], 'ETH-PERP': [42.5,37.8], 'SOL-PERP': [45.1,40.3]};
+
+  const opportunities = pairs.map(pair => {
+    const [fn, f01] = mockFunding[pair].map(v => v * (1 + (Math.random()-0.5)*0.2));
+    const captured = Math.max(fn, f01);
+    const hourly = captured / (365*24);
+    const feePct = 0.18;
+    const spreadN = 0.01 + Math.random()*0.03;
+    const spread01 = 0.01 + Math.random()*0.04;
+    const totalSpread = spreadN + spread01;
+    const totalCost = feePct + totalSpread;
+    const brkEven = hourly > 0 ? totalCost / hourly : 9999;
+    const holdH = Math.max(brkEven*1.5, 1);
+    const netApr = captured - (feePct * (365*24/holdH));
+    let score = 0;
+    if(netApr > 0) score += Math.min(netApr/50*60, 60);
+    if(totalSpread <= 0.06) score += Math.max(0, (0.06-totalSpread)/0.06*25);
+    score += Math.min(Math.min(25000,18000)/20000*15, 15);
+    const isViable = netApr >= 35 && totalSpread <= 0.06 && score >= 70 && brkEven <= 96;
+    return {
+      pair, long_protocol: fn >= f01 ? '01' : 'nado', short_protocol: fn >= f01 ? 'nado' : '01',
+      funding_apr_nado: +fn.toFixed(2), funding_apr_01: +f01.toFixed(2),
+      funding_captured_apr: +captured.toFixed(2), hourly_funding_pct: +hourly.toFixed(6),
+      total_fee_pct: feePct, total_spread_pct: +totalSpread.toFixed(4),
+      total_cost_pct: +totalCost.toFixed(4), net_apr: +netApr.toFixed(2),
+      breakeven_hours: +brkEven.toFixed(1), score: +score.toFixed(1),
+      is_viable: isViable, rejection_reason: isViable ? null : 'Filtro no superado'
+    };
+  });
+
+  const mockPos = {
+    id:'ETH-001', pair:'ETH-PERP', long_protocol:'01', short_protocol:'nado',
+    long_size_usd:225, short_size_usd:225, long_size_tokens:0.0693, short_size_tokens:0.0693,
+    long_entry_price:3245.50, short_entry_price:3248.20,
+    long_liq_price:2187, short_liq_price:4890,
+    total_capital_usd:450, leverage:2, entry_funding_apr:39.4,
+    open_time: new Date(Date.now()-21.5*3600000).toISOString(),
+    funding_collected_usd:3.87, fees_paid_usd:0.82,
+    funding_inversions_count:0, status:'open',
+    age_hours:21.5, net_pnl_usd:3.05, net_pnl_pct:0.68, realized_apr:11.6
+  };
+
+  const market_data = {};
+  pairs.forEach(p => {
+    const [fn, f01] = mockFunding[p];
+    market_data[p] = {
+      funding_apr_nado: fn*(1+(Math.random()-0.5)*0.1),
+      funding_apr_01: f01*(1+(Math.random()-0.5)*0.1),
+      spread_nado: 0.01+Math.random()*0.03,
+      spread_01: 0.02+Math.random()*0.04,
+      price_nado: mockPrices[p]*(1+(Math.random()-0.5)*0.002),
+      price_01: mockPrices[p]*(1+(Math.random()-0.5)*0.002),
+      depth_nado: 15000+Math.random()*20000,
+      depth_01: 12000+Math.random()*25000,
+    };
+  });
+
+  // Generate funding history
+  const funding_history = {};
+  pairs.forEach(p => {
+    const hist = [];
+    const baseN = mockFunding[p][0]/(365*24)/100;
+    const base01 = mockFunding[p][1]/(365*24)/100;
+    for(let i=0; i<200; i++) {
+      hist.push({
+        timestamp: now - (200-i)*120,
+        nado: baseN*(1+(Math.random()-0.5)*0.3),
+        ex01: base01*(1+(Math.random()-0.5)*0.3),
+      });
+    }
+    funding_history[p] = hist;
+  });
+
+  const logs = [
+    {time_str:'14:32:01',level:'INFO',message:'Funding rates obtenidos — BTC: 0.0044%/h, ETH: 0.0049%/h, SOL: 0.0051%/h'},
+    {time_str:'14:32:01',level:'OPRT',message:'Nueva oportunidad: SOL-PERP Net APR 41.2% (score 82)'},
+    {time_str:'14:32:05',level:'RISK',message:'ETH-001 revisada — OK (PnL: +$3.05, Liq: OK)'},
+    {time_str:'14:37:01',level:'INFO',message:'Proxima revision de riesgo en 5 min'},
+  ];
+
+  return {
+    type:'state', timestamp: now,
+    system: { status:'running', dry_run:true, paused:false, nado_connected:true, exchange01_connected:false, exchange01_mock:true },
+    opportunities, positions:[mockPos], closed_positions:[],
+    market_data, funding_history,
+    portfolio: { total_capital_deployed:450, funding_collected_usd:3.87, fees_paid_usd:0.82, net_pnl_usd:3.05, net_pnl_pct:0.68 },
+    recent_logs: logs,
+    risk_config: { max_position_usd:500, min_position_usd:150, max_leverage:2, max_open_positions:2, min_net_apr_pct:35, max_spread_pct:0.06, stop_loss_pnl_pct:3, liq_buffer_pct:35 }
+  };
+}
+
+// ===========================================================================
+// WEBSOCKET
+// ===========================================================================
+function connectWS() {
+  try {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => {
+      wsConnected = true;
+      updateConnectionStatus();
+      document.getElementById('offline-banner').style.display = 'none';
+    };
+    ws.onmessage = (e) => {
+      try { handleState(JSON.parse(e.data)); } catch(err) { console.error('WS parse error', err); }
+    };
+    ws.onclose = () => {
+      wsConnected = false;
+      updateConnectionStatus();
+      document.getElementById('offline-banner').style.display = 'block';
+      setTimeout(connectWS, 5000);
+    };
+    ws.onerror = () => { ws.close(); };
+  } catch(e) {
+    wsConnected = false;
+    updateConnectionStatus();
+    document.getElementById('offline-banner').style.display = 'block';
+    setTimeout(connectWS, 5000);
+  }
+}
+
+function sendAction(action) {
+  if(ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(action));
+  }
+}
+
+function requestRealMode() {
+  sendAction({action:'request_real_mode'});
+}
+
+// ===========================================================================
+// STATE HANDLER
+// ===========================================================================
+function handleState(s) {
+  state = s;
+  updateSystemStatus();
+  renderOpportunities();
+  renderPositions();
+  renderMarketData();
+  renderHistory();
+  renderLogs();
+  updatePortfolio();
+  updateFundingChart();
+  updateCalc();
+  refreshCountdown = 30;
+}
+
+function updateSystemStatus() {
+  if(!state) return;
+  const sys = state.system;
+
+  // Nado
+  const dotN = document.getElementById('dot-nado');
+  const statN = document.getElementById('status-nado');
+  dotN.className = 'status-dot ' + (sys.nado_connected ? 'ok' : 'fail');
+  statN.textContent = sys.nado_connected ? 'OK' : 'FAIL';
+
+  // 01
+  const dot01 = document.getElementById('dot-01');
+  const stat01 = document.getElementById('status-01');
+  if(sys.exchange01_connected) {
+    dot01.className = 'status-dot ok';
+    stat01.textContent = 'OK';
+  } else if(sys.exchange01_mock) {
+    dot01.className = 'status-dot mock';
+    stat01.textContent = 'MOCK';
+  } else {
+    dot01.className = 'status-dot fail';
+    stat01.textContent = 'FAIL';
+  }
+
+  // Dry run
+  const banner = document.getElementById('dry-run-banner');
+  const modeBadge = document.getElementById('mode-badge');
+  if(sys.dry_run) {
+    banner.style.display = 'block';
+    modeBadge.textContent = 'DRY';
+    modeBadge.className = 'badge badge-viable';
+  } else {
+    banner.style.display = 'none';
+    modeBadge.textContent = 'REAL';
+    modeBadge.className = 'badge badge-liq';
+  }
+}
+
+function updateConnectionStatus() {
+  const dot = document.getElementById('dot-ws');
+  const stat = document.getElementById('status-ws');
+  dot.className = 'status-dot ' + (wsConnected ? 'ok' : 'offline');
+  stat.textContent = wsConnected ? 'OK' : 'OFF';
+}
+
+// ===========================================================================
+// RENDER OPPORTUNITIES
+// ===========================================================================
+function renderOpportunities() {
+  if(!state) return;
+  const body = document.getElementById('opps-body');
+  const showRejected = document.getElementById('show-rejected').checked;
+  const opps = state.opportunities.slice().sort((a,b) => b.net_apr - a.net_apr);
+  const viableCount = opps.filter(o=>o.is_viable).length;
+  const countEl = document.getElementById('opp-count');
+  if(viableCount > 0) { countEl.style.display = 'inline'; countEl.textContent = viableCount; }
+  else { countEl.style.display = 'none'; }
+
+  let html = '';
+  for(const o of opps) {
+    if(!o.is_viable && !showRejected) continue;
+    const cls = o.score >= 85 ? 'top-viable' : o.is_viable ? 'viable' : 'not-viable';
+    const badge = o.score >= 85 ? '<span class="badge badge-top">TOP</span>' :
+                  o.is_viable ? '' : '<span class="badge badge-rejected">X</span>';
+    html += `<tr class="${cls}">
+      <td class="mono">${o.score.toFixed(0)} ${badge}</td>
+      <td><b>${o.pair}</b></td>
+      <td class="mono dim">${o.long_protocol.toUpperCase()}</td>
+      <td class="mono dim">${o.short_protocol.toUpperCase()}</td>
+      <td class="mono">${o.funding_apr_nado.toFixed(1)}%</td>
+      <td class="mono">${o.funding_apr_01.toFixed(1)}%</td>
+      <td class="mono">${o.total_fee_pct.toFixed(2)}%</td>
+      <td class="mono">${o.total_spread_pct.toFixed(4)}%</td>
+      <td class="mono ${o.net_apr >= 35 ? 'green' : o.net_apr >= 0 ? 'yellow' : 'red'}"><b>${o.net_apr.toFixed(1)}%</b></td>
+      <td class="mono">${o.breakeven_hours < 9000 ? o.breakeven_hours.toFixed(0)+'h' : '-'}</td>
+      <td>${o.is_viable ? `<button class="btn btn-green" onclick="openModal('${o.pair}')">ABRIR</button>` : `<span class="dim" title="${o.rejection_reason||''}">--</span>`}</td>
+    </tr>`;
+  }
+  body.innerHTML = html || '<tr><td colspan="11" class="dim" style="text-align:center;padding:20px">Sin datos de oportunidades</td></tr>';
+}
+
+// ===========================================================================
+// RENDER POSITIONS
+// ===========================================================================
+function renderPositions() {
+  if(!state) return;
+  const body = document.getElementById('pos-body');
+  document.getElementById('pos-count').textContent = state.positions.length;
+
+  let html = '';
+  for(const p of state.positions) {
+    const pnlCls = p.net_pnl_usd >= 0 ? 'green' : 'red';
+    // Liq distance
+    let liqPct = 50;
+    if(p.long_entry_price > 0 && p.long_liq_price > 0) {
+      const ld = (p.long_entry_price - p.long_liq_price) / p.long_entry_price * 100;
+      const sd = (p.short_liq_price - p.short_entry_price) / p.short_entry_price * 100;
+      liqPct = Math.min(ld, sd);
+    }
+    const liqColor = liqPct > 50 ? 'var(--green)' : liqPct > 30 ? 'var(--yellow)' : 'var(--red)';
+    const statusBadge = p.status === 'open' ? '<span class="badge badge-active">ACTIVA</span>' :
+                        p.status === 'closing' ? '<span class="badge badge-closing">CERRANDO</span>' : '';
+
+    html += `<tr>
+      <td class="mono"><b>${p.id}</b></td>
+      <td>${p.pair} ${statusBadge}</td>
+      <td class="mono">$${p.total_capital_usd.toFixed(0)}</td>
+      <td class="mono ${pnlCls}">$${p.net_pnl_usd >= 0 ? '+' : ''}${p.net_pnl_usd.toFixed(2)} (${p.net_pnl_pct >= 0 ? '+' : ''}${p.net_pnl_pct.toFixed(2)}%)</td>
+      <td class="mono">${p.realized_apr.toFixed(1)}%</td>
+      <td class="mono">${p.age_hours.toFixed(1)}h</td>
+      <td><div class="liq-bar"><div class="liq-bar-fill" style="width:${Math.min(liqPct,100)}%;background:${liqColor}"></div></div> <span class="mono dim">${liqPct.toFixed(0)}%</span></td>
+      <td><button class="btn btn-red" onclick="closePositionModal('${p.id}')">CERRAR</button></td>
+    </tr>`;
+  }
+  body.innerHTML = html || '<tr><td colspan="8" class="dim" style="text-align:center;padding:20px">Sin posiciones abiertas</td></tr>';
+}
+
+// ===========================================================================
+// RENDER MARKET DATA (fees table)
+// ===========================================================================
+function renderMarketData() {
+  if(!state) return;
+  const body = document.getElementById('fees-body');
+  let html = '';
+  for(const [pair, md] of Object.entries(state.market_data)) {
+    html += `<tr>
+      <td><b>${pair}</b></td>
+      <td class="mono">${(md.spread_nado||0).toFixed(4)}%</td>
+      <td class="mono">${(md.spread_01||0).toFixed(4)}%</td>
+      <td class="mono">$${(md.depth_nado||0).toFixed(0)}</td>
+      <td class="mono">$${(md.depth_01||0).toFixed(0)}</td>
+      <td class="mono">$${(md.price_nado||0).toFixed(2)}</td>
+      <td class="mono">$${(md.price_01||0).toFixed(2)}</td>
+    </tr>`;
+  }
+  body.innerHTML = html || '<tr><td colspan="7" class="dim">Sin datos</td></tr>';
+}
+
+// ===========================================================================
+// RENDER HISTORY
+// ===========================================================================
+function renderHistory() {
+  if(!state) return;
+  const body = document.getElementById('history-body');
+  const closed = state.closed_positions || [];
+  let html = '';
+  for(const p of closed.slice(-20).reverse()) {
+    const pnlCls = p.net_pnl_usd >= 0 ? 'green' : 'red';
+    html += `<tr>
+      <td class="mono">${p.id}</td>
+      <td>${p.pair}</td>
+      <td class="mono ${pnlCls}">$${p.net_pnl_usd >= 0 ? '+' : ''}${p.net_pnl_usd.toFixed(2)}</td>
+      <td class="mono">${p.realized_apr.toFixed(1)}%</td>
+      <td class="mono">${p.age_hours.toFixed(1)}h</td>
+      <td class="dim">${p.status}</td>
+    </tr>`;
+  }
+  body.innerHTML = html || '<tr><td colspan="6" class="dim" style="text-align:center;padding:10px">Sin historial</td></tr>';
+}
+
+// ===========================================================================
+// RENDER LOGS
+// ===========================================================================
+function renderLogs() {
+  if(!state) return;
+  const container = document.getElementById('log-container');
+  document.getElementById('log-count').textContent = state.recent_logs.length;
+  let html = '';
+  for(const log of state.recent_logs) {
+    html += `<div class="log-entry"><span class="log-time">[${log.time_str}]</span> <span class="log-${log.level}">${log.level}</span>  ${log.message}</div>`;
+  }
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+}
+
+// ===========================================================================
+// PORTFOLIO
+// ===========================================================================
+function updatePortfolio() {
+  if(!state) return;
+  const pf = state.portfolio;
+  document.getElementById('p-capital').textContent = '$' + pf.total_capital_deployed.toFixed(2);
+  document.getElementById('p-funding').textContent = '+$' + pf.funding_collected_usd.toFixed(2);
+  document.getElementById('p-fees').textContent = '-$' + pf.fees_paid_usd.toFixed(2);
+  const pnlEl = document.getElementById('p-pnl');
+  pnlEl.textContent = (pf.net_pnl_usd >= 0 ? '+$' : '-$') + Math.abs(pf.net_pnl_usd).toFixed(2) + ` (${pf.net_pnl_pct >= 0 ? '+' : ''}${pf.net_pnl_pct.toFixed(2)}%)`;
+  pnlEl.className = 'value mono ' + (pf.net_pnl_usd >= 0 ? 'green' : 'red');
+}
+
+// ===========================================================================
+// FUNDING CHART
+// ===========================================================================
+function initFundingChart() {
+  const ctx = document.getElementById('funding-chart').getContext('2d');
+  fundingChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'BTC Nado', borderColor: '#ffcc00', backgroundColor: 'rgba(255,204,0,0.1)', data: [], tension: 0.3, pointRadius: 0, borderWidth: 1.5 },
+        { label: 'BTC 01', borderColor: '#ffcc00', backgroundColor: 'transparent', data: [], tension: 0.3, pointRadius: 0, borderWidth: 1.5, borderDash: [5,3] },
+        { label: 'ETH Nado', borderColor: '#0088ff', backgroundColor: 'rgba(0,136,255,0.1)', data: [], tension: 0.3, pointRadius: 0, borderWidth: 1.5 },
+        { label: 'ETH 01', borderColor: '#0088ff', backgroundColor: 'transparent', data: [], tension: 0.3, pointRadius: 0, borderWidth: 1.5, borderDash: [5,3] },
+        { label: 'SOL Nado', borderColor: '#aa55ff', backgroundColor: 'rgba(170,85,255,0.1)', data: [], tension: 0.3, pointRadius: 0, borderWidth: 1.5 },
+        { label: 'SOL 01', borderColor: '#aa55ff', backgroundColor: 'transparent', data: [], tension: 0.3, pointRadius: 0, borderWidth: 1.5, borderDash: [5,3] },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#6666aa', font: { size: 10 } }, position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const apr = (ctx.raw * 365 * 24 * 100).toFixed(1);
+              return `${ctx.dataset.label}: ${(ctx.raw*100).toFixed(4)}%/h (${apr}% APR)`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#6666aa', font: { size: 9 }, maxTicksLimit: 12 }, grid: { color: 'rgba(26,26,46,0.5)' } },
+        y: {
+          ticks: { color: '#6666aa', font: { size: 9 }, callback: v => (v*100).toFixed(4)+'%' },
+          grid: { color: 'rgba(26,26,46,0.5)' },
+        }
+      }
+    }
+  });
+}
+
+function updateFundingChart() {
+  if(!state || !fundingChart || !state.funding_history) return;
+  const pairs = ['BTC-PERP','ETH-PERP','SOL-PERP'];
+  // Use first pair's timestamps as labels
+  const firstHist = state.funding_history[pairs[0]] || [];
+  const labels = firstHist.map(p => {
+    const d = new Date(p.timestamp * 1000);
+    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  });
+  fundingChart.data.labels = labels;
+
+  pairs.forEach((pair, i) => {
+    const hist = state.funding_history[pair] || [];
+    fundingChart.data.datasets[i*2].data = hist.map(h => h.nado);
+    fundingChart.data.datasets[i*2+1].data = hist.map(h => h.ex01);
+  });
+  fundingChart.update('none');
+}
+
+// ===========================================================================
+// CALCULATOR
+// ===========================================================================
+function syncSlider(input, sliderId) {
+  document.getElementById(sliderId).value = input.value;
+}
+
+function updateCalc() {
+  const capital = parseFloat(document.getElementById('calc-capital').value);
+  document.getElementById('calc-capital-num').value = capital;
+  const pair = document.getElementById('calc-pair').value;
+  const leverage = parseFloat(document.getElementById('calc-leverage').value);
+  document.getElementById('calc-lev-label').textContent = leverage.toFixed(1) + 'x';
+
+  // Get current market data
+  let fundingNado = 40, funding01 = 36, priceNado = 3250, price01 = 3250;
+  if(state && state.market_data && state.market_data[pair]) {
+    const md = state.market_data[pair];
+    fundingNado = md.funding_apr_nado || 40;
+    funding01 = md.funding_apr_01 || 36;
+    priceNado = md.price_nado || 3250;
+    price01 = md.price_01 || 3250;
+  }
+  const price = (priceNado + price01) / 2;
+  const captured = Math.max(fundingNado, funding01);
+  const capPerLeg = capital / 2;
+  const tokens = capPerLeg / price;
+  const feeOpen = capital * (0.04 + 0.05) / 100;
+  const feeClose = feeOpen;
+  const totalFees = feeOpen + feeClose;
+  const dailyFunding = capital * (captured / 100) / 365;
+  const weeklyFunding = dailyFunding * 7;
+  const monthlyFunding = dailyFunding * 30;
+  const hourlyFunding = dailyFunding / 24;
+  const brkEven = hourlyFunding > 0 ? totalFees / hourlyFunding : 9999;
+  const holdHours = Math.max(brkEven * 1.5, 1);
+  const netApr = captured - (0.18 * (365*24/holdHours));
+
+  const liqLong = price * (1 - 1/leverage * 0.9);
+  const liqShort = price * (1 + 1/leverage * 0.9);
+  const marginPerLeg = capPerLeg / leverage;
+
+  const roi7 = dailyFunding*7 - totalFees;
+  const roi14 = dailyFunding*14 - totalFees;
+  const roi30 = dailyFunding*30 - totalFees;
+  const apr7 = capital > 0 ? (roi7/capital)*(365/7)*100 : 0;
+  const apr14 = capital > 0 ? (roi14/capital)*(365/14)*100 : 0;
+  const apr30 = capital > 0 ? (roi30/capital)*(365/30)*100 : 0;
+
+  const tokenLabel = pair.split('-')[0];
+  const out = document.getElementById('calc-output');
+  out.innerHTML = `
+<span class="dim">Capital por pierna:</span>     <b>$${capPerLeg.toFixed(2)}</b>
+<span class="dim">Tamano long:</span>            ${tokens.toFixed(4)} ${tokenLabel} ($${capPerLeg.toFixed(2)})
+<span class="dim">Tamano short:</span>           ${tokens.toFixed(4)} ${tokenLabel} ($${capPerLeg.toFixed(2)})
+
+<span class="dim">Funding rate (capturado):</span> ${(captured/(365*24)).toFixed(4)}%/h → <span class="green">${captured.toFixed(1)}% APR</span>
+<span class="dim">Funding diario:</span>          <span class="green">+$${dailyFunding.toFixed(2)}/dia</span>
+<span class="dim">Funding semanal:</span>         <span class="green">+$${weeklyFunding.toFixed(2)}/sem</span>
+<span class="dim">Funding mensual:</span>         <span class="green">+$${monthlyFunding.toFixed(2)}/mes</span>
+
+<span class="dim">Fees apertura:</span>           <span class="red">-$${feeOpen.toFixed(2)}</span> (0.09%)
+<span class="dim">Fees cierre:</span>             <span class="red">-$${feeClose.toFixed(2)}</span> (0.09%)
+<span class="dim">Total fees round-trip:</span>   <span class="red">-$${totalFees.toFixed(2)}</span>
+
+<span class="dim">Break-even:</span>              ~${brkEven.toFixed(0)} horas (${(brkEven/24).toFixed(1)} dias)
+<span class="dim">Net APR (post-fees):</span>     <span class="${netApr >= 35 ? 'green' : 'yellow'}">${netApr.toFixed(1)}%</span>
+
+<span class="dim">Liq. Long:</span>               $${liqLong.toFixed(2)}
+<span class="dim">Liq. Short:</span>              $${liqShort.toFixed(2)}
+<span class="dim">Margen por pierna:</span>       $${marginPerLeg.toFixed(2)}
+
+<span class="dim">ROI si cierras en:</span>
+   7 dias: <span class="${roi7>=0?'green':'red'}">${roi7>=0?'+':''}$${roi7.toFixed(2)}</span> (${(roi7/capital*100).toFixed(2)}%)  APR: ${apr7.toFixed(1)}%
+  14 dias: <span class="${roi14>=0?'green':'red'}">${roi14>=0?'+':''}$${roi14.toFixed(2)}</span> (${(roi14/capital*100).toFixed(2)}%)  APR: ${apr14.toFixed(1)}%
+  30 dias: <span class="${roi30>=0?'green':'red'}">${roi30>=0?'+':''}$${roi30.toFixed(2)}</span> (${(roi30/capital*100).toFixed(2)}%)  APR: ${apr30.toFixed(1)}%`;
+}
+
+function copyCalcSummary() {
+  const text = document.getElementById('calc-output').innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.btn-blue');
+    btn.textContent = 'COPIADO!';
+    setTimeout(() => btn.textContent = 'COPIAR RESUMEN', 1500);
+  });
+}
+
+// ===========================================================================
+// MODALS
+// ===========================================================================
+function openModal(pair) {
+  const modal = document.getElementById('open-modal');
+  const content = document.getElementById('open-modal-content');
+  const opp = state ? state.opportunities.find(o => o.pair === pair) : null;
+  const capital = 450;
+  content.innerHTML = `
+    <div class="calc-input-group">
+      <label>Capital USD</label>
+      <input type="number" id="modal-capital" value="${capital}" min="150" max="900" class="mono">
+    </div>
+    <p class="dim" style="margin-top:8px">Par: <b>${pair}</b></p>
+    ${opp ? `<p class="dim">Net APR: <span class="green">${opp.net_apr.toFixed(1)}%</span> | Score: ${opp.score.toFixed(0)}</p>` : ''}
+    <p class="dim">Long: ${opp ? opp.long_protocol.toUpperCase() : 'AUTO'} | Short: ${opp ? opp.short_protocol.toUpperCase() : 'AUTO'}</p>
+  `;
+  document.getElementById('open-modal-confirm').onclick = () => {
+    const cap = parseFloat(document.getElementById('modal-capital').value);
+    sendAction({action:'open', pair:pair, capital:cap});
+    closeModal('open-modal');
+  };
+  modal.classList.add('active');
+}
+
+function closePositionModal(posId) {
+  const modal = document.getElementById('close-modal');
+  const content = document.getElementById('close-modal-content');
+  const pos = state ? state.positions.find(p => p.id === posId) : null;
+  content.innerHTML = pos ?
+    `<p>Cerrar posicion <b>${posId}</b> (${pos.pair})?</p>
+     <p class="mono ${pos.net_pnl_usd >= 0 ? 'green' : 'red'}">PnL: $${pos.net_pnl_usd.toFixed(2)} (${pos.net_pnl_pct.toFixed(2)}%)</p>
+     <p class="dim">Se cerraran ambas piernas simultaneamente.</p>` :
+    `<p>Cerrar posicion <b>${posId}</b>?</p>`;
+  document.getElementById('close-modal-confirm').onclick = () => {
+    sendAction({action:'close', position_id:posId});
+    closeModal('close-modal');
+  };
+  modal.classList.add('active');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+function exportCSV() {
+  if(!state || !state.closed_positions) return;
+  let csv = 'ID,Par,PnL USD,PnL %,APR Real,Horas,Capital\n';
+  for(const p of state.closed_positions) {
+    csv += `${p.id},${p.pair},${p.net_pnl_usd},${p.net_pnl_pct},${p.realized_apr},${p.age_hours},${p.total_capital_usd}\n`;
+  }
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'delta-neutral-history.csv';
+  a.click();
+}
+
+// ===========================================================================
+// HOTKEYS
+// ===========================================================================
+document.addEventListener('keydown', (e) => {
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if(e.key === 'r' || e.key === 'R') { sendAction({action:'refresh'}); }
+  if(e.key === 'o' || e.key === 'O') { document.getElementById('calc-capital-num').focus(); }
+  if(e.key === 'p' || e.key === 'P') {
+    if(state && state.system) {
+      sendAction({action: state.system.paused ? 'resume' : 'pause'});
+    }
+  }
+  if(e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+  }
+});
+
+// ===========================================================================
+// CLOCK & COUNTDOWN
+// ===========================================================================
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.getUTCHours().toString().padStart(2,'0') + ':' +
+    now.getUTCMinutes().toString().padStart(2,'0') + ':' +
+    now.getUTCSeconds().toString().padStart(2,'0') + ' UTC';
+}
+
+function updateCountdown() {
+  refreshCountdown = Math.max(0, refreshCountdown - 1);
+  document.getElementById('refresh-countdown').textContent = `Actualiza en: ${refreshCountdown}s`;
+}
+
+// ===========================================================================
+// INIT
+// ===========================================================================
+window.addEventListener('load', () => {
+  initFundingChart();
+  connectWS();
+  setInterval(updateClock, 1000);
+  setInterval(updateCountdown, 1000);
+  updateClock();
+
+  // Load mock data initially (will be replaced when WS connects)
+  setTimeout(() => {
+    if(!wsConnected) {
+      handleState(generateMockState());
+      document.getElementById('offline-banner').style.display = 'block';
+    }
+  }, 2000);
+
+  // Refresh mock data periodically when offline
+  setInterval(() => {
+    if(!wsConnected) {
+      handleState(generateMockState());
+    }
+  }, 30000);
+});
+</script>
+</body>
+</html>
