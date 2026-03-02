@@ -1,6 +1,7 @@
 """
 BSB Capital - Web Dashboard
-Flask application serving the analysis interface.
+Flask application serving the analysis interface with
+advanced institutional-grade scoring and investment memo generation.
 """
 
 import sys
@@ -22,6 +23,7 @@ from src.models.schemas import (
     VolatilityRegime, TrendDirection,
 )
 from src.fundamental.tokenomics import TokenomicsAnalyzer
+from src.fundamental.advanced_scoring import AdvancedScoringEngine
 from src.qualitative.sentiment import SentimentAnalyzer
 from src.qualitative.team_scoring import TeamScorer
 from src.qualitative.vc_analysis import VCAnalyzer
@@ -29,6 +31,7 @@ from src.technical.indicators import TechnicalIndicatorEngine
 from src.technical.volatility import VolatilityEngine
 from src.technical.news_impact import NewsImpactAnalyzer
 from src.risk.risk_engine import RiskEngine
+from src.core.memo_generator import MemoGenerator
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -162,7 +165,8 @@ def generate_ohlcv(key: str, days=300):
     }, index=pd.date_range(end=datetime.now(), periods=days, freq="D"))
 
 
-def run_analysis(key: str) -> dict:
+def _run_base_analysis(key: str):
+    """Run base analysis and return intermediate objects for reuse."""
     d = TOKENS[key]
     token = d["token"]
     community = d["community"]
@@ -192,6 +196,46 @@ def run_analysis(key: str) -> dict:
     risk = risk_eng.assess(tok_result, qual, tech)
     final_score, verdict = risk_eng.compute_verdict(tok_result, qual, tech, risk)
 
+    # Advanced scoring
+    adv_engine = AdvancedScoringEngine()
+    advanced = adv_engine.compute(token, community, tok_result, qual, tech, risk)
+
+    return {
+        "token": token,
+        "community": community,
+        "tok_result": tok_result,
+        "sentiment": sentiment,
+        "team": team,
+        "vc": vc,
+        "qual": qual,
+        "tech": tech,
+        "mom": mom,
+        "volat": volat,
+        "risk": risk,
+        "final_score": final_score,
+        "verdict": verdict,
+        "ohlcv": ohlcv,
+        "advanced": advanced,
+    }
+
+
+def run_analysis(key: str) -> dict:
+    base = _run_base_analysis(key)
+    token = base["token"]
+    tok_result = base["tok_result"]
+    sentiment = base["sentiment"]
+    team = base["team"]
+    vc = base["vc"]
+    qual = base["qual"]
+    tech = base["tech"]
+    mom = base["mom"]
+    volat = base["volat"]
+    risk = base["risk"]
+    final_score = base["final_score"]
+    verdict = base["verdict"]
+    ohlcv = base["ohlcv"]
+    advanced = base["advanced"]
+
     # Build price history for chart
     prices = ohlcv["close"].tolist()
     dates = [d.strftime("%Y-%m-%d") for d in ohlcv.index]
@@ -206,6 +250,10 @@ def run_analysis(key: str) -> dict:
         if p < 0.01: return f"${p:.6f}"
         if p < 1: return f"${p:.4f}"
         return f"${p:,.2f}"
+
+    td = advanced.tokenomics_dimensions
+    qd = advanced.qualitative_dimensions
+    qm = advanced.quantitative_metrics
 
     return {
         "token": {
@@ -231,6 +279,51 @@ def run_analysis(key: str) -> dict:
             "qualitative": round(qual.score, 1),
             "technical": round(tech.score, 1),
             "risk": round(risk.overall_risk_score, 1),
+        },
+        "advanced_scores": {
+            "composite": round(advanced.composite_score, 1),
+            "conviction_tier": advanced.conviction_tier,
+            "tokenomics_adv": round(td.weighted_score, 1),
+            "qualitative_adv": round(qd.weighted_score, 1),
+            "quantitative_adv": round(qm.weighted_score, 1),
+            "dimensions": {
+                "supply_mechanics": {"score": td.supply_mechanics, "detail": td.supply_detail},
+                "distribution": {"score": td.distribution, "detail": td.distribution_detail},
+                "utility": {"score": td.utility, "detail": td.utility_detail},
+                "value_accrual": {"score": td.value_accrual, "detail": td.value_accrual_detail},
+                "governance": {"score": td.governance, "detail": td.governance_detail},
+                "vesting": {"score": td.vesting_unlocks, "detail": td.vesting_detail},
+            },
+            "qualitative_dims": {
+                "team": {"score": round(qd.team, 1), "detail": qd.team_detail},
+                "pmf": {"score": round(qd.product_market_fit, 1), "detail": qd.pmf_detail},
+                "ecosystem": {"score": round(qd.ecosystem_partners, 1), "detail": qd.ecosystem_detail},
+                "moat": {"score": round(qd.competitive_moat, 1), "detail": qd.moat_detail},
+            },
+            "velocity": {
+                "estimated": round(advanced.velocity.estimated_velocity, 1),
+                "risk": advanced.velocity.velocity_risk,
+                "sinks": advanced.velocity.velocity_sinks,
+                "detail": advanced.velocity.detail,
+            },
+            "real_yield": {
+                "pct": round(advanced.real_yield.real_yield_pct, 1) if advanced.real_yield.real_yield_pct is not None else None,
+                "is_real": advanced.real_yield.is_real_yield,
+                "sustainability": advanced.real_yield.yield_sustainability,
+                "detail": advanced.real_yield.detail,
+            },
+            "value_accrual": {
+                "model": advanced.value_accrual.accrual_model,
+                "mechanisms": advanced.value_accrual.mechanisms,
+                "detail": advanced.value_accrual.detail,
+            },
+            "nvt": {"ratio": advanced.nvt_ratio, "signal": advanced.nvt_signal},
+            "metcalfe": {"ratio": advanced.metcalfe_value_ratio, "signal": advanced.metcalfe_signal},
+            "red_flags_auto": {
+                "triggered": advanced.red_flags.triggered,
+                "disqualified": advanced.red_flags.is_disqualified,
+                "detail": advanced.red_flags.detail,
+            },
         },
         "tokenomics": {
             "insider_pct": round(tok_result.distribution.insider_percentage, 1),
@@ -330,6 +423,30 @@ def analyze(token_key):
     if token_key not in TOKENS:
         return jsonify({"error": "Token not found"}), 404
     return jsonify(sanitize(run_analysis(token_key)))
+
+
+@app.route("/api/memo/<token_key>")
+def memo(token_key):
+    """Generate complete investment memo for a token."""
+    if token_key not in TOKENS:
+        return jsonify({"error": "Token not found"}), 404
+
+    base = _run_base_analysis(token_key)
+    d = TOKENS[token_key]
+
+    memo_gen = MemoGenerator()
+    memo_data = memo_gen.generate(
+        token=base["token"],
+        community_data=d["community"],
+        tokenomics=base["tok_result"],
+        qualitative=base["qual"],
+        technical=base["tech"],
+        risk=base["risk"],
+        advanced=base["advanced"],
+        final_score=base["final_score"],
+        verdict=base["verdict"],
+    )
+    return jsonify(sanitize(memo_data))
 
 
 if __name__ == "__main__":

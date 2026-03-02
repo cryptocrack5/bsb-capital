@@ -57,10 +57,8 @@ body {
   padding: 3px 8px; border-radius: 6px; font-weight: 600;
   border: 1px solid rgba(59,130,246,0.3);
 }
-
-.token-selector {
-  display: flex; gap: 8px; align-items: center;
-}
+.top-right { display: flex; align-items: center; gap: 12px; }
+.token-selector { display: flex; gap: 8px; align-items: center; }
 .token-btn {
   background: var(--bg-card); border: 1px solid var(--border);
   color: var(--text-secondary); padding: 8px 20px; border-radius: 8px;
@@ -72,6 +70,16 @@ body {
   background: var(--accent-glow); color: var(--accent);
   border-color: var(--accent); box-shadow: 0 0 20px rgba(59,130,246,0.15);
 }
+
+/* View toggle */
+.view-toggle { display: flex; gap: 4px; background: var(--bg-card); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
+.view-btn {
+  background: transparent; border: none; color: var(--text-muted); padding: 6px 16px;
+  border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; transition: all 0.2s;
+}
+.view-btn:hover { color: var(--text-primary); }
+.view-btn.active { background: var(--accent); color: white; }
 
 .container { max-width: 1440px; margin: 0 auto; padding: 24px 32px; }
 
@@ -215,6 +223,48 @@ body {
 /* Chart card */
 .chart-wrapper { position: relative; height: 260px; }
 
+/* Dimension scores (spider-like) */
+.dim-score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.dim-label { width: 120px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+.dim-dots { display: flex; gap: 4px; }
+.dim-dot { width: 24px; height: 8px; border-radius: 4px; background: var(--bg-primary); }
+.dim-dot.filled { background: var(--accent); }
+.dim-dot.filled.high { background: var(--green); }
+.dim-dot.filled.mid { background: var(--yellow); }
+.dim-dot.filled.low { background: var(--red); }
+.dim-val { font-size: 13px; font-weight: 700; width: 30px; text-align: right; }
+
+/* Memo styles */
+.memo-section {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 28px 32px; margin-bottom: 20px;
+}
+.memo-section-title {
+  font-size: 16px; font-weight: 800; color: var(--accent);
+  margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.memo-text { font-size: 14px; line-height: 1.8; color: var(--text-secondary); }
+.memo-text strong { color: var(--text-primary); }
+.memo-list { list-style: none; padding: 0; }
+.memo-list li {
+  padding: 8px 0; border-bottom: 1px solid rgba(42,53,80,0.3);
+  font-size: 13px; color: var(--text-secondary); line-height: 1.6;
+}
+.memo-list li:last-child { border-bottom: none; }
+.memo-list li::before { content: ''; margin-right: 8px; }
+.memo-kv { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(42,53,80,0.3); }
+.memo-kv:last-child { border-bottom: none; }
+.memo-key { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+.memo-val { font-size: 13px; font-weight: 700; }
+.scenario-card {
+  background: var(--bg-primary); border-radius: 12px; padding: 20px;
+  border: 1px solid var(--border);
+}
+.scenario-title { font-size: 14px; font-weight: 800; margin-bottom: 12px; }
+.scenario-card .sc-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.glossary-term { font-weight: 800; color: var(--accent); font-size: 13px; }
+.glossary-def { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.6; }
+
 /* Disclaimer */
 .disclaimer {
   text-align: center; color: var(--text-muted); font-size: 12px;
@@ -244,12 +294,18 @@ body {
     <div class="logo-icon">BSB</div>
     <div><span>BSB</span> CAPITAL <span class="badge">INSTITUTIONAL</span></div>
   </div>
-  <div class="token-selector" id="tokenSelector">
-    {% for t in tokens %}
-    <button class="token-btn {% if loop.first %}active{% endif %}" data-token="{{ t }}" onclick="loadToken('{{ t }}')">
-      {{ t | upper }}
-    </button>
-    {% endfor %}
+  <div class="top-right">
+    <div class="token-selector" id="tokenSelector">
+      {% for t in tokens %}
+      <button class="token-btn {% if loop.first %}active{% endif %}" data-token="{{ t }}" onclick="loadToken('{{ t }}')">
+        {{ t | upper }}
+      </button>
+      {% endfor %}
+    </div>
+    <div class="view-toggle">
+      <button class="view-btn active" id="viewDashboard" onclick="switchView('dashboard')">Dashboard</button>
+      <button class="view-btn" id="viewMemo" onclick="switchView('memo')">Memo</button>
+    </div>
   </div>
 </div>
 
@@ -267,8 +323,27 @@ body {
 <script>
 let priceChart = null;
 let distChart = null;
+let currentView = 'dashboard';
+let currentData = null;
+let currentMemo = null;
+let currentToken = null;
+
+function switchView(view) {
+  currentView = view;
+  document.getElementById('viewDashboard').classList.toggle('active', view === 'dashboard');
+  document.getElementById('viewMemo').classList.toggle('active', view === 'memo');
+  if (view === 'memo' && currentToken && !currentMemo) {
+    loadMemo(currentToken);
+  } else if (view === 'memo' && currentMemo) {
+    renderMemo(currentMemo, currentData);
+  } else if (view === 'dashboard' && currentData) {
+    renderDashboard(currentData);
+  }
+}
 
 function loadToken(key) {
+  currentToken = key;
+  currentMemo = null;
   document.querySelectorAll('.token-btn').forEach(b => b.classList.remove('active'));
   document.querySelector(`[data-token="${key}"]`).classList.add('active');
   document.getElementById('loading').classList.add('active');
@@ -276,7 +351,28 @@ function loadToken(key) {
   fetch(`/api/analyze/${key}`)
     .then(r => r.json())
     .then(data => {
-      renderDashboard(data);
+      currentData = data;
+      if (currentView === 'dashboard') {
+        renderDashboard(data);
+      } else {
+        loadMemo(key);
+        return;
+      }
+      document.getElementById('loading').classList.remove('active');
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('loading').classList.remove('active');
+    });
+}
+
+function loadMemo(key) {
+  document.getElementById('loading').classList.add('active');
+  fetch(`/api/memo/${key}`)
+    .then(r => r.json())
+    .then(memo => {
+      currentMemo = memo;
+      renderMemo(memo, currentData);
       document.getElementById('loading').classList.remove('active');
     })
     .catch(err => {
@@ -310,9 +406,33 @@ function scoreRingSVG(score, color) {
   </svg>`;
 }
 
+function dimScoreRow(label, score, max) {
+  max = max || 5;
+  let dots = '';
+  for (let i = 1; i <= max; i++) {
+    const filled = i <= Math.round(score);
+    const cls = score >= 4 ? 'high' : score >= 3 ? 'mid' : 'low';
+    dots += `<div class="dim-dot ${filled ? 'filled ' + cls : ''}"></div>`;
+  }
+  return `<div class="dim-score-row">
+    <div class="dim-label">${label}</div>
+    <div class="dim-dots">${dots}</div>
+    <div class="dim-val">${score.toFixed(1)}</div>
+  </div>`;
+}
+
+function velocityBadge(risk) {
+  const colors = { low: 'green', medium: 'yellow', high: 'red', critical: 'red' };
+  const labels = { low: 'Bajo', medium: 'Medio', high: 'Alto', critical: 'Critico' };
+  const c = colors[risk] || 'yellow';
+  return `<span class="ind-signal" style="background:var(--${c}-bg);color:var(--${c})">${labels[risk] || risk}</span>`;
+}
+
 function renderDashboard(d) {
   const vc = getVerdictColor(d.scores.verdict);
   const vs = d.scores.final;
+  const adv = d.advanced_scores;
+  const ac = getScoreColor(adv.composite);
 
   let html = `
   <!-- VERDICT BANNER -->
@@ -328,6 +448,7 @@ function renderDashboard(d) {
       <div class="verdict-label">Veredicto</div>
       <div class="verdict-value" style="color:${vc}">${d.scores.verdict}</div>
       <div class="verdict-score" style="color:${vc}">Score: ${vs}/100</div>
+      <div style="margin-top:4px;font-size:12px;color:${ac}"><strong>Adv: ${adv.composite}/100</strong> &middot; ${adv.conviction_tier}</div>
     </div>
   </div>
 
@@ -355,31 +476,58 @@ function renderDashboard(d) {
     </div>
   </div>
 
-  <!-- ROW: CHART + SCORE -->
+  <!-- ROW: CHART + ADVANCED SCORE -->
   <div class="grid-2">
     <div class="card">
       <div class="card-title"><span class="dot" style="background:var(--accent)"></span>Precio 90 Dias</div>
       <div class="chart-wrapper"><canvas id="priceChart"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Puntuacion Final</div>
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Scoring Avanzado</div>
       <div style="display:flex;align-items:center;gap:32px">
         <div class="score-ring-container">
           <div class="score-ring">
-            ${scoreRingSVG(vs, vc)}
+            ${scoreRingSVG(adv.composite, ac)}
             <div class="score-ring-text">
-              <div class="score-ring-value" style="color:${vc}">${vs}</div>
-              <div class="score-ring-label">Score</div>
+              <div class="score-ring-value" style="color:${ac}">${adv.composite}</div>
+              <div class="score-ring-label">${adv.conviction_tier}</div>
             </div>
           </div>
         </div>
         <div style="flex:1">
-          ${scoreBar('Tokenomics', d.scores.tokenomics)}
-          ${scoreBar('Cualitativo', d.scores.qualitative)}
-          ${scoreBar('Tecnico', d.scores.technical)}
+          ${scoreBar('Tokenomics', adv.tokenomics_adv)}
+          ${scoreBar('Cualitativo', adv.qualitative_adv)}
+          ${scoreBar('Cuantitativo', adv.quantitative_adv)}
           ${scoreBar('Riesgo', d.scores.risk)}
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ROW: 6-DIM TOKENOMICS + ADVANCED ANALYSIS -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>Tokenomics 6D Score</div>
+      ${dimScoreRow('Supply', adv.dimensions.supply_mechanics.score)}
+      ${dimScoreRow('Distribucion', adv.dimensions.distribution.score)}
+      ${dimScoreRow('Utilidad', adv.dimensions.utility.score)}
+      ${dimScoreRow('Val. Accrual', adv.dimensions.value_accrual.score)}
+      ${dimScoreRow('Gobernanza', adv.dimensions.governance.score)}
+      ${dimScoreRow('Vesting', adv.dimensions.vesting.score)}
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--text-muted);font-weight:600">SCORE PONDERADO</span>
+        <span style="font-size:20px;font-weight:800;color:${getScoreColor(adv.tokenomics_adv)}">${adv.tokenomics_adv}/100</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Analisis Avanzado</div>
+      ${indicatorRow('Token Velocity', adv.velocity.estimated + 'x', adv.velocity.risk === 'low' ? 'green' : adv.velocity.risk === 'medium' ? 'yellow' : 'red', '')}
+      <div style="padding:6px 0;font-size:12px;color:var(--text-muted)">Sinks: ${adv.velocity.sinks.length > 0 ? adv.velocity.sinks.join(', ') : 'Ninguno'}</div>
+      ${indicatorRow('Real Yield', adv.real_yield.pct !== null ? adv.real_yield.pct + '%' : 'N/D', adv.real_yield.is_real ? 'green' : adv.real_yield.pct !== null ? 'red' : 'yellow', adv.real_yield.sustainability)}
+      ${indicatorRow('Value Accrual', adv.value_accrual.model, adv.value_accrual.model !== 'none' ? 'green' : 'red', '')}
+      ${adv.nvt.ratio ? indicatorRow('NVT Ratio', adv.nvt.ratio, adv.nvt.ratio < 30 ? 'green' : adv.nvt.ratio > 80 ? 'red' : 'yellow', '') : ''}
+      ${adv.metcalfe.ratio ? indicatorRow('Metcalfe', adv.metcalfe.ratio, adv.metcalfe.ratio < 100 ? 'green' : adv.metcalfe.ratio > 500 ? 'red' : 'yellow', '') : ''}
+      ${adv.red_flags_auto.disqualified ? '<div style="margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--red-bg);color:var(--red);font-weight:700;font-size:13px;text-align:center">AUTO-DESCALIFICADO: Red Flags Criticas</div>' : ''}
     </div>
   </div>
 
@@ -411,35 +559,35 @@ function renderDashboard(d) {
     </div>
   </div>
 
-  <!-- ROW: QUALITATIVE 3-COLUMN -->
+  <!-- ROW: QUALITATIVE 3-COLUMN (ADVANCED) -->
   <div class="grid-3">
     <div class="card">
-      <div class="card-title"><span class="dot" style="background:var(--green)"></span>Sentimiento</div>
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>Sentimiento & PMF</div>
       <div class="metric-box" style="margin-bottom:16px">
-        <div class="metric-value" style="color:${getScoreColor(d.qualitative_detail.sentiment_score)}">${d.qualitative_detail.sentiment_score}</div>
-        <div class="metric-label">Score</div>
+        <div class="metric-value" style="color:${getScoreColor(adv.qualitative_dims.pmf.score)}">${adv.qualitative_dims.pmf.score}</div>
+        <div class="metric-label">Product-Market Fit</div>
       </div>
       ${indicatorRow('Hype Index', d.qualitative_detail.hype_index + '/100', d.qualitative_detail.hype_index > 80 ? 'yellow' : 'green', '')}
       ${indicatorRow('Organico', d.qualitative_detail.organic_ratio + '%', d.qualitative_detail.organic_ratio > 60 ? 'green' : d.qualitative_detail.organic_ratio > 30 ? 'yellow' : 'red', '')}
       ${indicatorRow('Sentimiento', (d.qualitative_detail.overall_sentiment > 0 ? '+' : '') + d.qualitative_detail.overall_sentiment, d.qualitative_detail.overall_sentiment > 0.3 ? 'green' : d.qualitative_detail.overall_sentiment < -0.3 ? 'red' : 'yellow', '')}
     </div>
     <div class="card">
-      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Equipo</div>
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>Equipo & Desarrollo</div>
       <div class="metric-box" style="margin-bottom:16px">
-        <div class="metric-value" style="color:${getScoreColor(d.qualitative_detail.team_score)}">${d.qualitative_detail.team_score}</div>
-        <div class="metric-label">Score</div>
+        <div class="metric-value" style="color:${getScoreColor(adv.qualitative_dims.team.score)}">${adv.qualitative_dims.team.score}</div>
+        <div class="metric-label">Equipo Score</div>
       </div>
       ${indicatorRow('Dev Activity', d.qualitative_detail.dev_activity + '/100', d.qualitative_detail.dev_activity > 60 ? 'green' : 'yellow', '')}
       ${indicatorRow('Commits 30d', d.qualitative_detail.commits_30d, d.qualitative_detail.commits_30d > 100 ? 'green' : d.qualitative_detail.commits_30d > 30 ? 'yellow' : 'red', '')}
       ${indicatorRow('Transparencia', d.qualitative_detail.transparency + '/100', d.qualitative_detail.transparency > 60 ? 'green' : 'yellow', '')}
     </div>
     <div class="card">
-      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>Inversores & VCs</div>
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>Ecosistema & Moat</div>
       <div class="metric-box" style="margin-bottom:16px">
-        <div class="metric-value" style="color:${getScoreColor(d.qualitative_detail.vc_score)}">${d.qualitative_detail.vc_score}</div>
-        <div class="metric-label">Score</div>
+        <div class="metric-value" style="color:${getScoreColor(adv.qualitative_dims.moat.score)}">${adv.qualitative_dims.moat.score}</div>
+        <div class="metric-label">Moat Competitivo</div>
       </div>
-      ${indicatorRow('Reputacion', d.qualitative_detail.vc_reputation + '/100', d.qualitative_detail.vc_reputation > 50 ? 'green' : 'yellow', '')}
+      ${indicatorRow('Ecosistema', adv.qualitative_dims.ecosystem.score + '/100', adv.qualitative_dims.ecosystem.score > 60 ? 'green' : 'yellow', '')}
       ${indicatorRow('Cap Table', d.qualitative_detail.cap_table_health + '/100', d.qualitative_detail.cap_table_health > 60 ? 'green' : 'yellow', '')}
       ${d.qualitative_detail.tier1.length > 0 ? '<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">Tier-1: <span style="color:var(--green);font-weight:600">' + d.qualitative_detail.tier1.join(', ') + '</span></div>' : '<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">Sin inversores Tier-1</div>'}
       ${d.qualitative_detail.partnerships.length > 0 ? '<div style="margin-top:6px;font-size:12px;color:var(--text-muted)">Partners: <span style="color:var(--cyan);font-weight:600">' + d.qualitative_detail.partnerships.join(', ') + '</span></div>' : ''}
@@ -501,6 +649,7 @@ function renderDashboard(d) {
 
   <div class="disclaimer">
     Este analisis es educativo y no constituye consejo financiero. Realice su propia investigacion antes de tomar decisiones de inversion.
+    <div style="margin-top:8px;font-size:11px">Framework basado en investigacion de Multicoin Capital, Paradigm, a16z crypto, Tim Roughgarden (Columbia), Guillermo Angeris (Stanford/Gauntlet).</div>
   </div>`;
 
   document.getElementById('content').innerHTML = html;
@@ -508,6 +657,314 @@ function renderDashboard(d) {
   renderDistChart(d.tokenomics);
 }
 
+/* ====================================================================
+   MEMO VIEW
+   ==================================================================== */
+function renderMemo(memo, dashData) {
+  const m = memo.metadata;
+  const vc = getVerdictColor(m.verdict);
+  const sc = getScoreColor(m.composite_score);
+  const ss = memo.scoring_summary;
+
+  let html = `
+  <!-- MEMO HEADER -->
+  <div class="verdict-banner" style="color:${vc}; background: var(--bg-card);">
+    <div class="verdict-left">
+      <div class="token-icon">${m.token_symbol}</div>
+      <div class="token-info">
+        <h1>Investment Memo: ${m.token_name}</h1>
+        <div class="sub">${m.token_type} &middot; ${m.date} &middot; BSB Capital Research</div>
+      </div>
+    </div>
+    <div class="verdict-right">
+      <div class="verdict-label">Score Compuesto</div>
+      <div class="verdict-value" style="color:${sc}">${m.composite_score}</div>
+      <div class="verdict-score" style="color:${sc}">${m.conviction_tier}</div>
+    </div>
+  </div>`;
+
+  // Render each section
+  memo.sections.forEach(section => {
+    html += renderMemoSection(section);
+  });
+
+  // Scoring Summary Card
+  html += `
+  <div class="memo-section">
+    <div class="memo-section-title">Resumen de Scoring Integrado</div>
+    <div class="grid-3" style="margin-bottom:0">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">Tokenomics (x0.30)</div>
+        ${Object.entries(ss.tokenomics_dimensions).filter(([k]) => k !== 'weighted_total').map(([k, v]) =>
+          `<div class="memo-kv"><span class="memo-key">${k.replace(/_/g,' ')}</span><span class="memo-val">${v.score}/${v.max}</span></div>`
+        ).join('')}
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between">
+          <span style="font-weight:800;font-size:13px">TOTAL</span>
+          <span style="font-weight:800;font-size:16px;color:${getScoreColor(ss.tokenomics_dimensions.weighted_total)}">${ss.tokenomics_dimensions.weighted_total}</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">Cualitativo (x0.35)</div>
+        ${Object.entries(ss.qualitative_dimensions).filter(([k]) => k !== 'weighted_total').map(([k, v]) =>
+          `<div class="memo-kv"><span class="memo-key">${k.replace(/_/g,' ')}</span><span class="memo-val">${v.score}/100</span></div>`
+        ).join('')}
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between">
+          <span style="font-weight:800;font-size:13px">TOTAL</span>
+          <span style="font-weight:800;font-size:16px;color:${getScoreColor(ss.qualitative_dimensions.weighted_total)}">${ss.qualitative_dimensions.weighted_total}</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">Cuantitativo (x0.35)</div>
+        ${Object.entries(ss.quantitative_metrics).filter(([k]) => k !== 'weighted_total').map(([k, v]) =>
+          `<div class="memo-kv"><span class="memo-key">${k.replace(/_/g,' ')}</span><span class="memo-val">${v.score}/100</span></div>`
+        ).join('')}
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between">
+          <span style="font-weight:800;font-size:13px">TOTAL</span>
+          <span style="font-weight:800;font-size:16px;color:${getScoreColor(ss.quantitative_metrics.weighted_total)}">${ss.quantitative_metrics.weighted_total}</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding:20px;border-radius:12px;background:var(--bg-primary);text-align:center">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">FORMULA COMPUESTA</div>
+      <div style="font-size:14px;color:var(--text-secondary)">
+        <span style="color:var(--accent)">${ss.composite.tokenomics_weighted}</span> +
+        <span style="color:var(--cyan)">${ss.composite.qualitative_weighted}</span> +
+        <span style="color:var(--green)">${ss.composite.quantitative_weighted}</span> =
+        <span style="font-size:24px;font-weight:800;color:${sc};margin-left:8px">${ss.composite.total}/100</span>
+      </div>
+    </div>
+  </div>`;
+
+  // Glossary
+  html += `
+  <div class="memo-section">
+    <div class="memo-section-title">Glosario</div>
+    <div class="grid-2" style="margin-bottom:0">
+      ${memo.glossary.map(g => `<div style="margin-bottom:12px"><div class="glossary-term">${g.term}</div><div class="glossary-def">${g.definition}</div></div>`).join('')}
+    </div>
+  </div>`;
+
+  html += `<div class="disclaimer">${memo.disclaimer}</div>`;
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function renderMemoSection(section) {
+  const c = section.content;
+  let body = '';
+
+  switch(section.id) {
+    case 'executive_summary':
+      body = `
+        <div class="memo-text"><strong>Tesis:</strong> ${c.thesis}</div>
+        <div class="grid-2" style="margin-top:16px;margin-bottom:0">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px">DRIVERS DE CONVICCION</div>
+            <ul class="memo-list">${c.conviction_drivers.map(d => `<li>${d}</li>`).join('')}</ul>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px">RIESGOS PRINCIPALES</div>
+            <ul class="memo-list">${c.key_risks.map(r => `<li>${r}</li>`).join('')}</ul>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:16px;flex-wrap:wrap">
+          <div class="stat-card" style="flex:1;min-width:100px"><div class="stat-label">Precio</div><div class="stat-value" style="font-size:18px">${c.price}</div></div>
+          <div class="stat-card" style="flex:1;min-width:100px"><div class="stat-label">Market Cap</div><div class="stat-value" style="font-size:18px">${c.market_cap}</div></div>
+          <div class="stat-card" style="flex:1;min-width:100px"><div class="stat-label">FDV</div><div class="stat-value" style="font-size:18px">${c.fdv}</div></div>
+          <div class="stat-card" style="flex:1;min-width:100px"><div class="stat-label">Score</div><div class="stat-value" style="font-size:18px;color:${getScoreColor(c.composite_score)}">${c.composite_score}</div></div>
+        </div>`;
+      break;
+
+    case 'market_context':
+      body = `
+        <div class="memo-text"><strong>Macro Tesis:</strong> ${c.macro_thesis}</div>
+        <div style="margin-top:12px" class="memo-text"><strong>TAM:</strong> ${c.tam_analysis}</div>
+        <div style="margin-top:12px" class="memo-text"><strong>Competencia:</strong> ${c.competitive_landscape}</div>
+        <div style="margin-top:12px" class="memo-text"><strong>Regulacion:</strong> ${c.regulatory_context}</div>`;
+      break;
+
+    case 'protocol_deep_dive':
+      body = `
+        <div class="memo-text">${c.description}</div>
+        <div style="margin-top:16px" class="memo-text"><strong>Arquitectura:</strong> ${c.architecture}</div>
+        <div style="margin-top:16px">
+          <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px">EVIDENCIA DE PMF (Score: ${c.pmf_score}/100)</div>
+          <ul class="memo-list">${c.pmf_evidence.map(e => `<li>${e}</li>`).join('')}</ul>
+        </div>
+        <div style="margin-top:16px;padding:16px;border-radius:10px;background:var(--bg-primary)">
+          <div style="font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:8px">ANALISIS DE VELOCIDAD (Token Velocity Problem)</div>
+          <div class="memo-text">${c.velocity_analysis.detail}</div>
+          ${c.velocity_analysis.sinks.length > 0 ? '<div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong>Velocity Sinks:</strong> ' + c.velocity_analysis.sinks.join(' | ') + '</div>' : ''}
+        </div>
+        <div style="margin-top:12px;padding:16px;border-radius:10px;background:var(--bg-primary)">
+          <div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:8px">ACUMULACION DE VALOR (Modelo: ${c.value_accrual.model})</div>
+          <div class="memo-text">${c.value_accrual.detail}</div>
+        </div>`;
+      break;
+
+    case 'tokenomics':
+      body = `
+        <div class="grid-2" style="margin-bottom:16px">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px">SUPPLY</div>
+            ${Object.entries(c.supply).map(([k,v]) => `<div class="memo-kv"><span class="memo-key">${k.replace(/_/g,' ')}</span><span class="memo-val">${v}</span></div>`).join('')}
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px">DISTRIBUCION</div>
+            ${Object.entries(c.distribution).map(([k,v]) => `<div class="memo-kv"><span class="memo-key">${k.replace(/_/g,' ')}</span><span class="memo-val">${v}</span></div>`).join('')}
+          </div>
+        </div>
+        <div style="padding:16px;border-radius:10px;background:var(--bg-primary);margin-bottom:16px">
+          <div style="font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:8px">REAL YIELD (${c.real_yield.sustainability})</div>
+          <div class="memo-text">${c.real_yield.detail}</div>
+          <div style="margin-top:8px;display:flex;gap:16px;font-size:12px">
+            <span>Revenue: <strong>${c.real_yield.protocol_revenue}</strong></span>
+            <span>Emisiones: <strong>${c.real_yield.emissions_value}</strong></span>
+            <span>Yield: <strong style="color:${c.real_yield.real_yield_pct.includes('-') ? 'var(--red)' : 'var(--green)'}">${c.real_yield.real_yield_pct}</strong></span>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">SCORING 6D (${c.weighted_score}/100)</div>
+        ${Object.entries(c.dimension_scores).map(([k,v]) =>
+          `<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+            <span style="width:110px;font-size:12px;color:var(--text-muted)">${k.replace(/_/g,' ')}</span>
+            <div style="flex:1;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden">
+              <div style="width:${v.score/5*100}%;height:100%;background:${v.score >= 4 ? 'var(--green)' : v.score >= 3 ? 'var(--yellow)' : 'var(--red)'};border-radius:3px"></div>
+            </div>
+            <span style="width:30px;text-align:right;font-size:13px;font-weight:700">${v.score}</span>
+          </div>`
+        ).join('')}
+        ${c.red_flags.triggered.length > 0 ? `
+          <div style="margin-top:16px;padding:16px;border-radius:10px;background:var(--red-bg)">
+            <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px">RED FLAGS AUTO-DESCALIFICADORAS ${c.red_flags.disqualified ? '(DESCALIFICADO)' : ''}</div>
+            <ul class="memo-list">${c.red_flags.triggered.map(f => `<li style="color:var(--red)">${f}</li>`).join('')}</ul>
+          </div>` : ''}`;
+      break;
+
+    case 'team_evaluation':
+      body = `
+        <div class="grid-2" style="margin-bottom:0">
+          <div>
+            <div class="memo-kv"><span class="memo-key">Founders</span><span class="memo-val">${c.founders.join(', ')}</span></div>
+            <div class="memo-kv"><span class="memo-key">Doxxed</span><span class="memo-val" style="color:${c.doxxed ? 'var(--green)' : 'var(--red)'}">${c.doxxed ? 'Si' : 'No'}</span></div>
+            <div class="memo-kv"><span class="memo-key">Team Score</span><span class="memo-val" style="color:${getScoreColor(c.team_score)}">${c.team_score}/100</span></div>
+            <div class="memo-kv"><span class="memo-key">Dev Activity</span><span class="memo-val">${c.dev_activity}/100</span></div>
+            <div class="memo-kv"><span class="memo-key">Commits 30d</span><span class="memo-val">${c.commits_30d}</span></div>
+            <div class="memo-kv"><span class="memo-key">Transparencia</span><span class="memo-val">${c.transparency}/100</span></div>
+          </div>
+          <div>
+            <div class="memo-text"><strong>Evaluacion:</strong> ${c.assessment}</div>
+            <div style="margin-top:12px" class="memo-text" style="font-size:12px">${c.doxxed_note}</div>
+          </div>
+        </div>`;
+      break;
+
+    case 'competitive_moats':
+      body = `
+        <div class="memo-text"><strong>Moat Score:</strong> <span style="color:${getScoreColor(c.moat_score)}">${c.moat_score}/100</span></div>
+        <div style="margin-top:12px" class="memo-text">${c.moat_detail}</div>
+        <div class="structural-grid" style="margin-top:16px">
+          ${structItem('Moat de Liquidez', c.liquidity_moat)}
+          ${structItem('Network Effects', c.network_effects)}
+          ${structItem('Switching Costs', c.switching_costs)}
+          ${structItem('Brand / Lindy', c.brand_lindy)}
+        </div>
+        <div style="margin-top:16px" class="memo-text">${c.composability_note}</div>
+        ${c.tier1_vcs.length > 0 ? '<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">Tier-1 VCs: <strong style="color:var(--green)">' + c.tier1_vcs.join(', ') + '</strong></div>' : ''}
+        ${c.partners.length > 0 ? '<div style="margin-top:6px;font-size:12px;color:var(--text-muted)">Partners: <strong style="color:var(--cyan)">' + c.partners.join(', ') + '</strong></div>' : ''}`;
+      break;
+
+    case 'financial_model':
+      body = `
+        <div style="margin-bottom:16px;font-size:14px">Score Cuantitativo: <strong style="color:${getScoreColor(c.quantitative_score)}">${c.quantitative_score}/100</strong></div>
+        ${Object.entries(c.metrics).map(([k,v]) =>
+          `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            <span style="width:140px;font-size:12px;color:var(--text-muted)">${k.replace(/_/g,' ')}</span>
+            <div style="flex:1;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden">
+              <div style="width:${v.score}%;height:100%;background:${getScoreColor(v.score)};border-radius:3px"></div>
+            </div>
+            <span style="width:40px;text-align:right;font-size:13px;font-weight:700">${v.score}</span>
+          </div>
+          <div style="margin-left:152px;font-size:11px;color:var(--text-muted);margin-bottom:12px">${v.detail}</div>`
+        ).join('')}`;
+      break;
+
+    case 'risk_analysis':
+      body = `
+        <div style="margin-bottom:16px">Risk Score: <strong style="color:${getScoreColor(c.overall_risk_score)}">${c.overall_risk_score}/100</strong> (mayor = mas seguro)</div>
+        <div class="flag-list" style="margin-bottom:16px">
+          ${c.red_flags.map(f => flagItem('red', '&#9888;', f.category, f.description)).join('')}
+          ${c.yellow_flags.map(f => flagItem('yellow', '&#9888;', f.category, f.description)).join('')}
+          ${c.green_flags.map(f => flagItem('green', '&#10003;', f.category, f.description)).join('')}
+        </div>
+        <div class="grid-2" style="margin-bottom:0">
+          ${Object.entries(c.risk_categories).map(([k,v]) => `
+            <div style="padding:12px 16px;border-radius:10px;background:var(--bg-primary);margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">${k.replace(/_/g,' ').toUpperCase()}</span>
+                <span style="font-size:12px;font-weight:700;color:var(--${v.level === 'bajo' || v.level === 'low' ? 'green' : v.level === 'alto' || v.level === 'high' || v.level === 'critical' ? 'red' : 'yellow'})">${v.level.toUpperCase()}</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);line-height:1.5">${v.detail}</div>
+            </div>
+          `).join('')}
+        </div>`;
+      break;
+
+    case 'scenarios':
+      const scenarios = [
+        { key: 'bull', label: 'BULL CASE', color: 'var(--green)', data: c.bull },
+        { key: 'base', label: 'BASE CASE', color: 'var(--yellow)', data: c.base },
+        { key: 'bear', label: 'BEAR CASE', color: 'var(--red)', data: c.bear },
+      ];
+      body = `
+        <div class="grid-3" style="margin-bottom:16px">
+          ${scenarios.map(s => `
+            <div class="scenario-card">
+              <div class="scenario-title" style="color:${s.color}">${s.label}</div>
+              <div class="sc-row"><span>Probabilidad</span><strong>${s.data.probability}</strong></div>
+              <div class="sc-row"><span>Target</span><strong style="color:${s.color}">${s.data.target_price}</strong></div>
+              <div class="sc-row"><span>Multiplicador</span><strong>${s.data.multiplier}</strong></div>
+              <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+                ${s.data.assumptions.map(a => '<div style="margin-bottom:4px">- ' + a + '</div>').join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div style="padding:16px;border-radius:10px;background:var(--bg-primary);text-align:center">
+          <span style="font-size:12px;color:var(--text-muted)">RETORNO ESPERADO PONDERADO: </span>
+          <span style="font-size:20px;font-weight:800;color:${c.expected_return.includes('+') ? 'var(--green)' : 'var(--red)'}">${c.expected_return}</span>
+          <span style="font-size:14px;color:var(--text-muted);margin-left:8px">(${c.expected_multiplier})</span>
+        </div>`;
+      break;
+
+    case 'recommendation':
+      body = `
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:48px;font-weight:900;color:${getScoreColor(c.composite_score)}">${c.composite_score}</div>
+          <div style="font-size:14px;color:var(--text-muted);margin-top:4px">${c.conviction_tier} &middot; ${c.verdict}</div>
+        </div>
+        <div style="margin-bottom:16px" class="memo-text">${c.formula}</div>
+        <div class="grid-2" style="margin-bottom:16px">
+          <div class="stat-card"><div class="stat-label">Position Sizing</div><div class="stat-value" style="font-size:16px">${c.position_sizing}</div></div>
+          <div class="stat-card"><div class="stat-label">Entry Strategy</div><div class="stat-value" style="font-size:16px">${c.entry_strategy}</div></div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px">CRITERIOS DE SALIDA</div>
+        <ul class="memo-list">${c.exit_criteria.map(e => `<li>${e}</li>`).join('')}</ul>`;
+      break;
+
+    default:
+      body = `<div class="memo-text">${JSON.stringify(c, null, 2)}</div>`;
+  }
+
+  return `<div class="memo-section">
+    <div class="memo-section-title">${section.title}</div>
+    ${body}
+  </div>`;
+}
+
+
+/* ====================================================================
+   SHARED HELPERS
+   ==================================================================== */
 function scoreBar(label, score) {
   const c = getScoreColor(score);
   return `<div class="score-bar-row">
