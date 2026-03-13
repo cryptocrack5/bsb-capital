@@ -19,6 +19,7 @@ setup(
         "scikit-learn>=1.3.0",
         "aiohttp>=3.9.0",
         "pydantic>=2.0.0",
+        "flask>=3.0.0",
     ],
     entry_points={
         "console_scripts": [
